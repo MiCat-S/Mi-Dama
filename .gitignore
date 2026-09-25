@@ -1,0 +1,9 @@
+.build/
+.swiftpm/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+# 网上收集的真实截图只用于本地测试，不入库
+testdata/real/
+testdata/synthetic/
+testdata/out/
