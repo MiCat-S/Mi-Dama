@@ -1,4 +1,5 @@
 // 打码效果选择：每一项的缩略图都是用真实渲染器对一段示例号码打码的结果，所见即所得
+#if canImport(UIKit)
 import CoreImage
 import RedactKit
 import SwiftUI
@@ -120,3 +121,4 @@ enum EffectPreview {
         return UIImage(cgImage: cg)
     }
 }
+#endif

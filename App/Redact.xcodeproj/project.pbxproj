@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		AA0000000000000000000001 /* RedactKit in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000000002 /* RedactKit */; };
+		AA0000000000000000000004 /* RedactUI in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000000005 /* RedactUI */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -28,6 +29,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA0000000000000000000001 /* RedactKit in Frameworks */,
+				AA0000000000000000000004 /* RedactUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -71,6 +73,7 @@
 			name = Redact;
 			packageProductDependencies = (
 				AA0000000000000000000002 /* RedactKit */,
+				AA0000000000000000000005 /* RedactUI */,
 			);
 			productName = Redact;
 			productReference = AA0000000000000000000010 /* Redact.app */;
@@ -253,6 +256,10 @@
 		AA0000000000000000000002 /* RedactKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = RedactKit;
+		};
+		AA0000000000000000000005 /* RedactUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = RedactUI;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

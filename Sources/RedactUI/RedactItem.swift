@@ -1,4 +1,5 @@
 // 一张待处理的图片：原图、识别结果、用户的勾选与样式
+#if canImport(UIKit)
 import CoreImage
 import Observation
 import RedactKit
@@ -6,27 +7,27 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 @MainActor @Observable
-final class RedactItem: Identifiable {
-    enum Phase: Equatable {
+public final class RedactItem: Identifiable {
+    public enum Phase: Equatable {
         case detecting, ready, saved
         case failed(String)
     }
 
-    let id = UUID()
-    let source: CIImage
+    public let id = UUID()
+    public let source: CIImage
     /// PNG 视为截图，导出 PNG；其余（照片）导出 HEIC
-    let isScreenshot: Bool
-    let displayImage: UIImage
-    var findings: [Finding] = []
-    var phase: Phase = .detecting
+    public let isScreenshot: Bool
+    public let displayImage: UIImage
+    public var findings: [Finding] = []
+    public var phase: Phase = .detecting
     /// 全局效果；nil = 自动（按类别选默认效果）。单处在 Finding.style 里另外指定
-    var styleOverride: MaskStyle? = Preferences.style
+    public var styleOverride: MaskStyle? = Preferences.style
     /// 色块、杂讯色块的颜色
-    var fillColorHex: String = Preferences.colorHex
+    public var fillColorHex: String = Preferences.colorHex
 
     private static let context = CIContext(options: [.cacheIntermediates: false])
 
-    init?(data: Data) {
+    public init?(data: Data) {
         guard let raw = CIImage(data: data, options: [.applyOrientationProperty: true]) else { return nil }
         let image = raw.transformed(by: CGAffineTransform(translationX: -raw.extent.minX, y: -raw.extent.minY))
         guard let cg = Self.context.createCGImage(image, from: image.extent) else { return nil }
@@ -35,10 +36,10 @@ final class RedactItem: Identifiable {
         displayImage = UIImage(cgImage: cg)
     }
 
-    var size: CGSize { source.extent.size }
-    var enabledCount: Int { findings.filter(\.isEnabled).count }
+    public var size: CGSize { source.extent.size }
+    public var enabledCount: Int { findings.filter(\.isEnabled).count }
 
-    func detect() async {
+    public func detect() async {
         phase = .detecting
         let source = self.source
         do {
@@ -52,20 +53,21 @@ final class RedactItem: Identifiable {
     }
 
     /// 当前勾选 + 样式对应的导出任务（可跨线程传递）
-    var export: RedactedExport {
+    public var export: RedactedExport {
         RedactedExport(source: source, findings: findings, style: styleOverride, color: .fromHex(fillColorHex),
                        format: isScreenshot ? .png : .heic(quality: 0.9))
     }
 
     /// 打码预览（后台渲染）
-    func renderPreview() async -> UIImage? {
+    public func renderPreview() async -> UIImage? {
         let export = self.export
         return await Task.detached(priority: .userInitiated) { export.render().map(UIImage.init(cgImage:)) }.value
     }
 }
 
 /// 渲染 + 编码，不带任何元数据；也用作分享面板的内容
-struct RedactedExport: Transferable, @unchecked Sendable {
+/// @unchecked Sendable：CIImage / CIColor 不可变、可跨线程读取，但 SDK 没有标注 Sendable
+public struct RedactedExport: Transferable, @unchecked Sendable {
     let source: CIImage
     let findings: [Finding]
     let style: MaskStyle?
@@ -74,26 +76,27 @@ struct RedactedExport: Transferable, @unchecked Sendable {
 
     private static let context = CIContext(options: [.cacheIntermediates: false])
 
-    func render() -> CGImage? {
+    public func render() -> CGImage? {
         var redactor = Redactor(context: Self.context)
         redactor.fillColor = color
         return redactor.makeCGImage(redactor.render(source, findings: findings, style: style))
     }
 
-    func data() throws -> Data {
+    public func data() throws -> Data {
         guard let cg = render() else { throw Exporter.Failure.encodeFailed }
         return try Exporter.data(cg, format: format)
     }
 
-    var contentType: UTType {
+    public var contentType: UTType {
         if case .png = format { return .png }
         return .heic
     }
 
-    static var transferRepresentation: some TransferRepresentation {
+    public static var transferRepresentation: some TransferRepresentation {
         DataRepresentation(exportedContentType: .png) { try $0.data() }
             .exportingCondition { $0.contentType == .png }
         DataRepresentation(exportedContentType: .heic) { try $0.data() }
             .exportingCondition { $0.contentType == .heic }
     }
 }
+#endif

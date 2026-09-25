@@ -1,6 +1,7 @@
 // 首页：选图（系统选择器，无需相册权限）→ 自动识别 → 列表里逐张审核或一键全部保存
 import PhotosUI
 import RedactKit
+import RedactUI
 import SwiftUI
 
 struct HomeView: View {

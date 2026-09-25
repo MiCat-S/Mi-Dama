@@ -1,8 +1,9 @@
 // 审核页：看识别框、点框取消 / 恢复、长按框单独换效果、按类别整组开关、手动补框、选打码效果、保存或分享
+#if canImport(UIKit)
 import RedactKit
 import SwiftUI
 
-struct ReviewView: View {
+public struct ReviewView: View {
     @Bindable var item: RedactItem
     @State private var showPreview = false
     @State private var drawing = false
@@ -11,7 +12,11 @@ struct ReviewView: View {
     @State private var message: String?
     @State private var showEffects = false
 
-    var body: some View {
+    public init(item: RedactItem) {
+        self.item = item
+    }
+
+    public var body: some View {
         VStack(spacing: 0) {
             ScrollView {
                 canvas
@@ -222,3 +227,4 @@ struct ReviewView: View {
         }
     }
 }
+#endif
