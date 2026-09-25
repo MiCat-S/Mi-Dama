@@ -1,4 +1,4 @@
-// 首页：选图（系统选择器，无需相册权限）→ 自动识别 → 列表里逐张审核或一键全部保存
+// 首页：选图（系统选择器，无需相册权限）→ 自动识别（带进度、可取消）→ 列表里逐张审核或一键全部保存
 // 选择器绑定 .shared() 相册，才能拿到原图的 localIdentifier（"保存后删除原图"要用）
 import PhotosUI
 import RedactKit
@@ -8,8 +8,12 @@ import SwiftUI
 struct HomeView: View {
     @State private var pickerItems: [PhotosPickerItem] = []
     @State private var items: [RedactItem] = []
-    @State private var savingAll = false
     @State private var message: String?
+    @State private var detectTask: Task<Void, Never>?
+    /// 识别进度；nil = 没有在识别
+    @State private var detectProgress: (done: Int, total: Int)?
+    /// 全部保存的进度；nil = 没有在保存
+    @State private var saveProgress: (done: Int, total: Int)?
 
     var body: some View {
         NavigationStack {
@@ -18,7 +22,16 @@ struct HomeView: View {
                     emptyState
                 } else {
                     List(items) { item in
-                        NavigationLink { ReviewView(item: item) } label: { row(item) }
+                        if item.phase == .cancelled {
+                            HStack {
+                                ItemRow(item: item)
+                                Spacer()
+                                Button("重新识别") { Task { await item.detect() } }
+                                    .buttonStyle(.bordered)
+                            }
+                        } else {
+                            NavigationLink { ReviewView(item: item) } label: { ItemRow(item: item) }
+                        }
                     }
                 }
             }
@@ -29,12 +42,7 @@ struct HomeView: View {
                         Label("选择图片", systemImage: "photo.badge.plus")
                     }
                 }
-                if items.contains(where: { $0.phase == .ready }) {
-                    ToolbarItem(placement: .bottomBar) {
-                        Button(savingAll ? "保存中…" : "全部保存到相册") { Task { await saveAll() } }
-                            .disabled(savingAll)
-                    }
-                }
+                ToolbarItem(placement: .bottomBar) { bottomBar }
             }
             .onChange(of: pickerItems) { _, newValue in
                 Task { await load(newValue) }
@@ -42,6 +50,26 @@ struct HomeView: View {
             .alert(message ?? "", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
                 Button("好") {}
             }
+        }
+    }
+
+    @ViewBuilder
+    private var bottomBar: some View {
+        if let p = detectProgress {
+            HStack(spacing: 12) {
+                ProgressView(value: Double(p.done), total: Double(max(1, p.total)))
+                    .frame(width: 120)
+                Text("识别中 \(p.done)/\(p.total)").monospacedDigit()
+                Button("取消", role: .cancel) { detectTask?.cancel() }
+            }
+        } else if let p = saveProgress {
+            HStack(spacing: 12) {
+                ProgressView(value: Double(p.done), total: Double(max(1, p.total)))
+                    .frame(width: 120)
+                Text("保存中 \(p.done)/\(p.total)").monospacedDigit()
+            }
+        } else if items.contains(where: { $0.phase == .ready }) {
+            Button("全部保存到相册") { Task { await saveAll() } }
         }
     }
 
@@ -64,40 +92,9 @@ struct HomeView: View {
         .padding()
     }
 
-    private func row(_ item: RedactItem) -> some View {
-        HStack(spacing: 12) {
-            Image(uiImage: item.displayImage)
-                .resizable()
-                .scaledToFill()
-                .frame(width: 48, height: 64)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-            VStack(alignment: .leading, spacing: 4) {
-                switch item.phase {
-                case .detecting:
-                    Label("识别中…", systemImage: "hourglass")
-                case .ready:
-                    Text("发现 \(item.findings.count) 处，已勾选 \(item.enabledCount) 处")
-                    Text(summary(item)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                case .saved:
-                    Label("已保存", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
-                case .cancelled:
-                    Label("已取消", systemImage: "xmark.circle").foregroundStyle(.secondary)
-                case .failed(let reason):
-                    Label(reason, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
-                }
-            }
-        }
-    }
-
-    private func summary(_ item: RedactItem) -> String {
-        Dictionary(grouping: item.findings, by: \.kind)
-            .sorted { $0.value.count != $1.value.count ? $0.value.count > $1.value.count : $0.key.rawValue < $1.key.rawValue }
-            .map { "\($0.key.label) \($0.value.count)" }
-            .joined(separator: " · ")
-    }
-
     private func load(_ selection: [PhotosPickerItem]) async {
         guard !selection.isEmpty else { return }
+        detectTask?.cancel()
         var loaded: [RedactItem] = []
         for p in selection {
             if let data = try? await p.loadTransferable(type: Data.self),
@@ -107,28 +104,48 @@ struct HomeView: View {
         }
         items = loaded
         pickerItems = []
+        let task = Task { await detectAll(loaded) }
+        detectTask = task
+        await task.value
+    }
+
+    /// 同时最多识别 2 张，避免大图把内存顶满。取消后正在识别的那张会跑完（Vision 请求无法中断），
+    /// 还没开始的标为"已取消"
+    private func detectAll(_ list: [RedactItem]) async {
+        detectProgress = (0, list.count)
         await withTaskGroup(of: Void.self) { group in
-            // 同时最多识别 2 张，避免大图把内存顶满
-            var iterator = loaded.makeIterator()
-            for _ in 0..<2 { if let item = iterator.next() { group.addTask { await item.detect() } } }
-            while await group.next() != nil {
-                if let item = iterator.next() { group.addTask { await item.detect() } }
+            var next = 0
+            while next < min(2, list.count) {
+                let item = list[next]
+                next += 1
+                group.addTask { await item.detect() }
             }
+            while await group.next() != nil {
+                detectProgress?.done += 1
+                guard !Task.isCancelled, next < list.count else { continue }
+                let item = list[next]
+                next += 1
+                group.addTask { await item.detect() }
+            }
+            for item in list[next...] { item.phase = .cancelled }
         }
+        detectProgress = nil
     }
 
     private func saveAll() async {
-        savingAll = true
-        defer { savingAll = false }
+        let targets = items.filter { $0.phase == .ready }
+        saveProgress = (0, targets.count)
+        defer { saveProgress = nil }
         var saved = 0
         var originals: [String] = []
         do {
-            for item in items where item.phase == .ready {
+            for item in targets {
                 let export = item.export
                 let data = try await Task.detached { try export.data() }.value
                 try await PhotoSaver.save(data)
                 item.phase = .saved
                 saved += 1
+                saveProgress?.done = saved
                 if let id = item.assetIdentifier { originals.append(id) }
             }
         } catch {

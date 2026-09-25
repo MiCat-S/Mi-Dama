@@ -23,10 +23,16 @@ public struct ReviewView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            ScrollView {
+            ZoomableView(aspect: item.size.height / max(1, item.size.width), isScrollEnabled: !drawing) {
                 canvas
             }
-            .scrollDisabled(drawing)
+            .overlay {
+                if item.phase == .detecting {
+                    ProgressView("识别中…")
+                        .padding()
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                }
+            }
             controls
         }
         .navigationTitle(item.findings.isEmpty ? "未发现敏感信息" : "已勾选 \(item.enabledCount) / \(item.findings.count)")
