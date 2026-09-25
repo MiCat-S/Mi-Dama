@@ -1,4 +1,4 @@
-// 审核页：看识别框、点框取消 / 恢复、长按框单独换效果、按类别整组开关、手动补框、选打码效果、保存或分享
+// 审核页：看识别框、点框取消 / 恢复、长按框单独换效果、按类别整组开关、手动补框、选打码效果、导出选项、保存或分享
 #if canImport(UIKit)
 import RedactKit
 import SwiftUI
@@ -11,9 +11,14 @@ public struct ReviewView: View {
     @State private var preview: UIImage?
     @State private var message: String?
     @State private var showEffects = false
+    @State private var showExportOptions = false
+    private let settings = ExportSettings.shared
+    /// 保存成功后的回调（分享扩展用它结束扩展）；为 nil 时弹出提示
+    private let onSaved: (() -> Void)?
 
-    public init(item: RedactItem) {
+    public init(item: RedactItem, onSaved: (() -> Void)? = nil) {
         self.item = item
+        self.onSaved = onSaved
     }
 
     public var body: some View {
@@ -28,6 +33,8 @@ public struct ReviewView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
+                Button { showExportOptions = true } label: { Image(systemName: "ellipsis.circle") }
+                    .accessibilityLabel("导出选项")
                 ShareLink(item: item.export, preview: SharePreview("打码后的图片", image: Image(uiImage: preview ?? item.displayImage)))
                 Button("保存") { Task { await save() } }
             }
@@ -42,6 +49,11 @@ public struct ReviewView: View {
         .sheet(isPresented: $showEffects) {
             EffectSheet(style: $item.styleOverride, colorHex: $item.fillColorHex)
         }
+        .sheet(isPresented: $showExportOptions) {
+            ExportOptionsSheet(settings: settings, item: item)
+        }
+        // 水印变了也切到效果预览，才看得到
+        .onChange(of: watermarkKey) { showPreview = true }
         // 换了效果就切到效果预览，并记住作为下次的默认
         .onChange(of: item.styleOverride) { _, new in
             Preferences.style = new
@@ -55,9 +67,11 @@ public struct ReviewView: View {
 
     /// 勾选或样式变化时重新渲染预览
     private var renderKey: String {
-        "\(showPreview)-\(item.styleOverride?.rawValue ?? "auto")-\(item.fillColorHex)-"
+        "\(showPreview)-\(item.styleOverride?.rawValue ?? "auto")-\(item.fillColorHex)-\(watermarkKey)-"
             + item.findings.map { "\($0.id)\($0.isEnabled)\($0.style?.rawValue ?? "")" }.joined()
     }
+
+    private var watermarkKey: String { String(describing: settings.activeWatermark) }
 
     // MARK: - 图片与识别框
 
@@ -221,10 +235,25 @@ public struct ReviewView: View {
             let data = try await Task.detached { try export.data() }.value
             try await PhotoSaver.save(data)
             item.phase = .saved
-            message = "已保存到相册"
         } catch {
             message = error.localizedDescription
+            return
         }
+        if let onSaved {
+            onSaved()
+            return
+        }
+        // 只有保存成功后才删原图
+        var deletion: Result<PhotoSaver.DeleteOutcome, Error>?
+        if settings.deleteOriginal {
+            if let id = item.assetIdentifier {
+                do { deletion = .success(try await PhotoSaver.deleteOriginals([id])) } catch { deletion = .failure(error) }
+            } else {
+                message = "已保存到相册（这张图不是从相册选的，无法删除原图）"
+                return
+            }
+        }
+        message = PhotoSaver.summary(saved: 1, deletion: deletion)
     }
 }
 #endif

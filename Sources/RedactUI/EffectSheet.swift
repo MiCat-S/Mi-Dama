@@ -22,7 +22,7 @@ struct EffectSheet: View {
                     Text("色块、杂讯色块、彩虹条、彩虹格不读取原图，任何情况下都无法还原。像素化和模糊用在文字上时，强度不足可能被辨认。长按图上的框可以给单独一处换效果。")
                 }
                 if style?.usesColor == true {
-                    Section("颜色") { colorPalette }
+                    Section("颜色") { ColorPaletteRow(colorHex: $colorHex) }
                 }
             }
             .navigationTitle("打码效果")
@@ -49,27 +49,6 @@ struct EffectSheet: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-    }
-
-    private var colorPalette: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 12) {
-                ForEach(Preferences.palette, id: \.hex) { c in
-                    Circle()
-                        .fill(Color(hex: c.hex))
-                        .frame(width: 30, height: 30)
-                        .overlay(Circle().stroke(.secondary.opacity(0.4), lineWidth: 1))
-                        .overlay(Circle().stroke(.tint, lineWidth: 3).padding(-4).opacity(colorHex == c.hex ? 1 : 0))
-                        .onTapGesture { colorHex = c.hex }
-                        .accessibilityLabel(c.name)
-                }
-                ColorPicker("自定义", selection: Binding(get: { Color(hex: colorHex) }, set: { colorHex = $0.hexString }),
-                            supportsOpacity: false)
-                    .labelsHidden()
-            }
-            .padding(.vertical, 6)
-            .padding(.horizontal, 4)
-        }
     }
 
     static func subtitle(_ s: MaskStyle) -> String {

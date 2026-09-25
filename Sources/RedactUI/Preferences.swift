@@ -24,14 +24,6 @@ public enum Preferences {
     ]
 }
 
-extension CIColor {
-    public static func fromHex(_ hex: String) -> CIColor {
-        let v = UInt32(hex.trimmingCharacters(in: CharacterSet(charactersIn: "#")), radix: 16) ?? 0
-        return CIColor(red: CGFloat((v >> 16) & 0xFF) / 255, green: CGFloat((v >> 8) & 0xFF) / 255, blue: CGFloat(v & 0xFF) / 255,
-                       alpha: 1, colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!) ?? .black
-    }
-}
-
 extension Color {
     public init(hex: String) {
         let c = CIColor.fromHex(hex)

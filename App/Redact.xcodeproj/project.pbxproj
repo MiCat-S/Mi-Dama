@@ -182,6 +182,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "截图打码";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "把打码后的图片保存到相册（只添加，不读取你的照片）";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "仅在你开启「保存后删除原图」时使用：删除刚打码的那张原图。";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
@@ -206,6 +207,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "截图打码";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "把打码后的图片保存到相册（只添加，不读取你的照片）";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "仅在你开启「保存后删除原图」时使用：删除刚打码的那张原图。";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;

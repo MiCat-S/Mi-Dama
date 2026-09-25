@@ -1,4 +1,5 @@
 // 首页：选图（系统选择器，无需相册权限）→ 自动识别 → 列表里逐张审核或一键全部保存
+// 选择器绑定 .shared() 相册，才能拿到原图的 localIdentifier（"保存后删除原图"要用）
 import PhotosUI
 import RedactKit
 import RedactUI
@@ -24,7 +25,7 @@ struct HomeView: View {
             .navigationTitle("截图打码")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    PhotosPicker(selection: $pickerItems, maxSelectionCount: 20, matching: .images) {
+                    PhotosPicker(selection: $pickerItems, maxSelectionCount: 20, matching: .images, photoLibrary: .shared()) {
                         Label("选择图片", systemImage: "photo.badge.plus")
                     }
                 }
@@ -55,7 +56,7 @@ struct HomeView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-            PhotosPicker(selection: $pickerItems, maxSelectionCount: 20, matching: .images) {
+            PhotosPicker(selection: $pickerItems, maxSelectionCount: 20, matching: .images, photoLibrary: .shared()) {
                 Text("选择截图").frame(maxWidth: 220).padding(.vertical, 6)
             }
             .buttonStyle(.borderedProminent)
@@ -79,6 +80,8 @@ struct HomeView: View {
                     Text(summary(item)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 case .saved:
                     Label("已保存", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                case .cancelled:
+                    Label("已取消", systemImage: "xmark.circle").foregroundStyle(.secondary)
                 case .failed(let reason):
                     Label(reason, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
                 }
@@ -97,7 +100,8 @@ struct HomeView: View {
         guard !selection.isEmpty else { return }
         var loaded: [RedactItem] = []
         for p in selection {
-            if let data = try? await p.loadTransferable(type: Data.self), let item = RedactItem(data: data) {
+            if let data = try? await p.loadTransferable(type: Data.self),
+               let item = RedactItem(data: data, assetIdentifier: p.itemIdentifier) {
                 loaded.append(item)
             }
         }
@@ -117,6 +121,7 @@ struct HomeView: View {
         savingAll = true
         defer { savingAll = false }
         var saved = 0
+        var originals: [String] = []
         do {
             for item in items where item.phase == .ready {
                 let export = item.export
@@ -124,10 +129,17 @@ struct HomeView: View {
                 try await PhotoSaver.save(data)
                 item.phase = .saved
                 saved += 1
+                if let id = item.assetIdentifier { originals.append(id) }
             }
-            message = "已保存 \(saved) 张"
         } catch {
-            message = error.localizedDescription
+            message = saved > 0 ? "已保存 \(saved) 张，之后出错：\(error.localizedDescription)" : error.localizedDescription
+            return
         }
+        // 全部保存成功后，一次性删除原图（系统只确认一次）
+        var deletion: Result<PhotoSaver.DeleteOutcome, Error>?
+        if ExportSettings.shared.deleteOriginal, !originals.isEmpty {
+            do { deletion = .success(try await PhotoSaver.deleteOriginals(originals)) } catch { deletion = .failure(error) }
+        }
+        message = PhotoSaver.summary(saved: saved, deletion: deletion)
     }
 }
