@@ -80,6 +80,16 @@
 - **强度随区域大小变化**：大图上的人脸、小字都盖得住；文字默认用"抹除"（背景纯色时直接填平），而不是容易被还原的轻度模糊
 - **缩放在打码之后**：导出时选了缩小尺寸，也不会削弱打码
 
+## 安装
+
+还没有上架 App Store，提供**未签名的 IPA**，需要自己签名安装：
+
+1. 在 [Releases](https://github.com/MiCat-S/Mi-Dama/releases) 下载 `Mi-Dama-<版本>-unsigned.ipa`，或者按下面的方法自己编译
+2. 用 [Sideloadly](https://sideloadly.io)、[AltStore](https://altstore.io)、TrollStore、爱思助手等工具签名安装
+3. 签名时**保留分享扩展**（`PlugIns/RedactShare.appex`），否则分享菜单里不会出现「截图打码」
+
+注意：用免费 Apple ID 签名的 App 7 天后需要重新签名；分享扩展会额外占用一个 App ID 名额。IPA 只有 1.4 MB，需要 iOS 17 或更新。
+
 ## 从源码运行
 
 需要 Xcode 26 或更新（开发时用的是 Xcode 27），App 最低支持 iOS 17（iOS 26 起使用液态玻璃，更早的系统自动回退）。
@@ -91,6 +101,12 @@ open App/Redact.xcodeproj      # 选择你的签名团队后运行
 ```
 
 装到自己手机前，把 `com.example.redact` 换成你自己的 Bundle ID，并给 App 和分享扩展（RedactShare）都选好签名团队。
+
+也可以直接编译未签名的 IPA（输出到 `dist/`）：
+
+```bash
+Tools/build-unsigned-ipa.sh
+```
 
 核心库和评估工具不需要 iOS，在 Mac 上就能跑：
 
