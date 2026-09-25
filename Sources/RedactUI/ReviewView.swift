@@ -15,6 +15,8 @@ public struct ReviewView: View {
     @State private var sheet: ReviewSheet?
     /// 每次点框 / 类别 / 画框都加一，驱动轻触反馈
     @State private var selectionTicks = 0
+    /// 底部浮动面板的高度，交给缩放视图留出滚动空间
+    @State private var controlsHeight: CGFloat = 0
     private let settings = ExportSettings.shared
     /// 保存完成后的回调（分享扩展用它结束扩展）；为 nil 时弹出结果提示
     private let onSaved: ((SaveReport) -> Void)?
@@ -30,25 +32,29 @@ public struct ReviewView: View {
     }
 
     public var body: some View {
-        VStack(spacing: 0) {
-            ZoomableView(aspect: item.size.height / max(1, item.size.width), isScrollEnabled: !drawing) {
-                canvas
+        ZoomableView(aspect: item.size.height / max(1, item.size.width), isScrollEnabled: !drawing,
+                     bottomInset: controlsHeight) {
+            canvas
+        }
+        .ignoresSafeArea(edges: .bottom)
+        .overlay {
+            if item.isDetecting && item.displayImage != nil {
+                ProgressView("识别中…")
+                    .padding()
+                    .glassBadge()
             }
-            .overlay {
-                if item.isDetecting && item.displayImage != nil {
-                    ProgressView("识别中…")
-                        .padding()
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-                }
-            }
+        }
+        // 控件浮在图片上方，图片从下面滚过
+        .overlay(alignment: .bottom) {
             controls
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { controlsHeight = $0 }
         }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("导出") { sheet = .export }
-                    .buttonStyle(.borderedProminent)
+                    .primaryActionStyle()
                     .disabled(item.isDetecting)
             }
         }
@@ -255,7 +261,7 @@ public struct ReviewView: View {
             .padding(.horizontal)
         }
         .padding(.vertical, 10)
-        .background(.bar)
+        .floatingPanel(.bottom)
     }
 
     private func setAll(_ kind: FindingKind, _ enabled: Bool) {

@@ -86,10 +86,10 @@ struct BatchReviewView: View {
                     exportRequest = ExportRequest(items: items)
                 }
             }
-            .buttonStyle(.bordered)
+            .secondaryActionStyle()
             .padding(.trailing, 12)
         }
-        .background(.bar)
+        .floatingPanel(.top, cornerRadius: 22)
     }
 }
 

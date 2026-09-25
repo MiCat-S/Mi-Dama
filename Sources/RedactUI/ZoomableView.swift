@@ -9,6 +9,8 @@ struct ZoomableView<Content: View>: UIViewRepresentable {
     let aspect: CGFloat
     /// 手动画框时关掉单指拖动，让拖拽交给 SwiftUI 画框手势（双指缩放仍然可用）
     let isScrollEnabled: Bool
+    /// 底部浮动面板的高度：内容可以滚到面板上方，不会被永久挡住
+    var bottomInset: CGFloat = 0
     @ViewBuilder let content: () -> Content
 
     func makeCoordinator() -> Coordinator {
@@ -39,6 +41,10 @@ struct ZoomableView<Content: View>: UIViewRepresentable {
     func updateUIView(_ scrollView: ZoomScrollView, context: Context) {
         context.coordinator.host.rootView = content()
         scrollView.isScrollEnabled = isScrollEnabled
+        if scrollView.extraBottomInset != bottomInset {
+            scrollView.extraBottomInset = bottomInset
+            scrollView.setNeedsLayout()
+        }
         if scrollView.aspect != aspect {
             scrollView.aspect = aspect
             scrollView.setNeedsLayout()
@@ -77,6 +83,7 @@ struct ZoomableView<Content: View>: UIViewRepresentable {
 final class ZoomScrollView: UIScrollView {
     weak var hostView: UIView?
     var aspect: CGFloat = 1
+    var extraBottomInset: CGFloat = 0
     private var baseSize: CGSize = .zero
 
     override func layoutSubviews() {
@@ -93,12 +100,16 @@ final class ZoomScrollView: UIScrollView {
         centerContent()
     }
 
-    /// 内容比可视区小时居中显示
+    /// 内容比可视区小时在"面板以上"的区域里居中；比可视区大时底部多留出面板高度
     func centerContent() {
+        let visibleHeight = bounds.height - extraBottomInset
         let dx = max(0, (bounds.width - contentSize.width) / 2)
-        let dy = max(0, (bounds.height - contentSize.height) / 2)
-        let inset = UIEdgeInsets(top: dy, left: dx, bottom: dy, right: dx)
-        if contentInset != inset { contentInset = inset }
+        let dy = max(0, (visibleHeight - contentSize.height) / 2)
+        let inset = UIEdgeInsets(top: dy, left: dx, bottom: dy + extraBottomInset, right: dx)
+        if contentInset != inset {
+            contentInset = inset
+            verticalScrollIndicatorInsets.bottom = extraBottomInset
+        }
     }
 }
 #endif

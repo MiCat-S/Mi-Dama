@@ -76,7 +76,7 @@ public struct ExportSheet: View {
                     }
                 }
             }
-            .safeAreaInset(edge: .bottom) { actions }
+            .bottomActionBar { actions }
             .navigationTitle(items.count == 1 ? "导出" : "导出 \(items.count) 张")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } } }
@@ -127,7 +127,7 @@ public struct ExportSheet: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
                 }
-                .buttonStyle(.borderedProminent)
+                .primaryActionStyle()
                 ShareLink(items: items.map(\.export)) { exports in
                     SharePreview(items.count == 1 ? "打码后的图片" : "\(items.count) 张打码后的图片",
                                  image: Image(uiImage: preview ?? UIImage()))
@@ -136,11 +136,9 @@ public struct ExportSheet: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
                 }
-                .buttonStyle(.bordered)
+                .secondaryActionStyle()
             }
         }
-        .padding()
-        .background(.bar)
     }
 
     private func save() async {
