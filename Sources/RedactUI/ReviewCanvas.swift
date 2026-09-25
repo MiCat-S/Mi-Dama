@@ -30,13 +30,18 @@ struct ReviewCanvas: View {
         GeometryReader { geo in
             let scale = geo.size.width / item.size.width
             ZStack(alignment: .topLeading) {
+                // 动效只用透明度 / 颜色：识别完成时框淡入，切到打码预览时淡出；
+                // 不涉及位移，开启「减弱动态效果」时也合适
                 ForEach(item.findings) { finding in
                     FindingBoxView(finding: finding, scale: scale)
                         .onTapGesture { toggle(finding.id) }
                         .contextMenu { FindingMenu(finding: finding, item: item, onEdit: onEdit) }
+                        .transition(.opacity)
                 }
                 .opacity(showPreview ? 0 : 1)
                 .allowsHitTesting(!showPreview)
+                .animation(.easeOut(duration: 0.25), value: item.findings.count)
+                .animation(.easeInOut(duration: 0.2), value: showPreview)
                 if let dragRect {
                     Rectangle().stroke(.yellow, lineWidth: 2)
                         .frame(width: dragRect.width, height: dragRect.height)
@@ -84,11 +89,16 @@ struct FindingBoxView: View {
             .overlay(Rectangle().stroke(tint, style: StrokeStyle(lineWidth: 1.5, dash: finding.isEnabled ? [] : [4, 3])))
             .overlay(alignment: .topTrailing) {
                 if let style = finding.style, finding.isEnabled {
-                    Text(style.label).font(.system(size: 9, weight: .semibold)).padding(.horizontal, 3)
+                    // 角标贴在框的上沿外侧：字号变大时自动往上长，不会压住框
+                    Text(style.label).font(.caption2.weight(.semibold)).dynamicTypeSize(...DynamicTypeSize.large)
+                        .padding(.horizontal, 3)
                         .background(tint, in: RoundedRectangle(cornerRadius: 3)).foregroundStyle(.white)
-                        .fixedSize().offset(y: -12)
+                        .fixedSize()
+                        .alignmentGuide(.top) { $0[.bottom] }
                 }
             }
+            // 点一下立即有反馈：填充在约 0.12 秒内淡入 / 淡出
+            .animation(.easeOut(duration: 0.12), value: finding.isEnabled)
             .frame(width: max(8, r.width * scale), height: max(8, r.height * scale))
             // 未勾选时填充是透明的，SwiftUI 不会命中透明区域，必须显式指定点击范围
             .contentShape(Rectangle())

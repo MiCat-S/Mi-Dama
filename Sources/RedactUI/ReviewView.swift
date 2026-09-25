@@ -41,8 +41,10 @@ public struct ReviewView: View {
                 ProgressView("识别中…")
                     .padding()
                     .glassBadge()
+                    .transition(.opacity)
             }
         }
+        .animation(.easeOut(duration: 0.2), value: item.isDetecting)
         // 控件浮在图片上方，图片从下面滚过
         .overlay(alignment: .bottom) {
             ReviewControls(item: item, showPreview: $showPreview, drawing: $drawing,

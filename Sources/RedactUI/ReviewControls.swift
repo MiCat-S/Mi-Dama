@@ -52,6 +52,7 @@ struct CategoryChips: View {
                                 .background(entry.enabled ? entry.kind.tint.opacity(0.18) : Color.secondary.opacity(0.1), in: Capsule())
                                 .foregroundStyle(entry.enabled ? entry.kind.tint : .secondary)
                         }
+                        .animation(.easeOut(duration: 0.15), value: entry.enabled)
                         .accessibilityAddTraits(entry.enabled ? .isSelected : [])
                     }
                 }
@@ -66,12 +67,14 @@ struct EffectButton: View {
     let style: MaskStyle?
     let colorHex: String
     let action: () -> Void
+    @ScaledMetric(relativeTo: .footnote) private var thumbWidth: CGFloat = 32
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 6) {
                 Image(uiImage: EffectPreview.image(style, colorHex: colorHex))
-                    .resizable().frame(width: 32, height: 12).clipShape(RoundedRectangle(cornerRadius: 3))
+                    .resizable().frame(width: thumbWidth, height: thumbWidth * 0.375)
+                    .clipShape(RoundedRectangle(cornerRadius: 3))
                 Text(style?.label ?? "自动").font(.footnote.weight(.medium)).lineLimit(1)
             }
         }

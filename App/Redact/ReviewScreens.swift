@@ -35,6 +35,7 @@ struct BatchReviewView: View {
     /// 用 sheet(item:) 把要导出的图片随弹出一起传进去（isPresented 版本会拿到旧的空列表）
     @State private var exportRequest: ExportRequest?
     @State private var report: SaveReport?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(keys: [String], store: ItemStore) {
         self.keys = keys
@@ -77,7 +78,10 @@ struct BatchReviewView: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
                 }
-                .onChange(of: current) { _, key in withAnimation { proxy.scrollTo(key, anchor: .center) } }
+                // 唯一的位移动画：开启「减弱动态效果」时直接跳到位置
+                .onChange(of: current) { _, key in
+                    withAnimation(reduceMotion ? nil : .default) { proxy.scrollTo(key, anchor: .center) }
+                }
             }
             Button("全部导出") {
                 Task {

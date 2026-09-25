@@ -11,11 +11,13 @@ struct PermissionPromptView: View {
     let onRequestAccess: () -> Void
     let onOpenSettings: () -> Void
     let onPickManually: () -> Void
+    /// 跟随系统字号缩放
+    @ScaledMetric(relativeTo: .largeTitle) private var iconSize: CGFloat = 60
 
     var body: some View {
         VStack(spacing: 16) {
             Image(systemName: kind == .onboarding ? "eye.slash.circle.fill" : "photo.badge.exclamationmark")
-                .font(.system(size: 60))
+                .font(.system(size: iconSize))
                 .foregroundStyle(kind == .onboarding ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
             Text(kind == .onboarding ? "自动找出截图里的敏感信息" : "没有相册访问权限")
                 .font(.title3.bold())
@@ -117,7 +119,9 @@ struct AssetCell: View {
             .clipped()
             .overlay(alignment: .bottomLeading) {
                 if isOutput {
-                    Text("已打码").font(.system(size: 10, weight: .semibold)).padding(.horizontal, 4).padding(.vertical, 1)
+                    // 缩略图尺寸固定，角标字号跟随系统但设上限，避免撑出格子
+                    Text("已打码").font(.caption2.weight(.semibold)).dynamicTypeSize(...DynamicTypeSize.xLarge)
+                        .padding(.horizontal, 4).padding(.vertical, 1)
                         .background(.black.opacity(0.55), in: Capsule()).foregroundStyle(.white).padding(4)
                 }
             }
