@@ -27,6 +27,7 @@ Sources/redact-cli/      macOS 命令行：批量识别、输出标注图 / 打�
 Tests/                   规则、渲染（贴边模糊、叠加翻出、抹除残留）、导出（水印、尺寸、三种格式无元数据）、布局回归
 App/Redact/              App 主程序 + 快捷指令动作（Intents/）
 App/RedactShare/         分享扩展
+Tools/icon/               App 图标生成脚本：swift Tools/icon/render-icon.swift App/Redact/Assets.xcassets/AppIcon.appiconset bubble
 testdata/                本地测试图（不入库；fixtures/with-gps.jpg 是用来测 EXIF 的合成图）
 ```
 
