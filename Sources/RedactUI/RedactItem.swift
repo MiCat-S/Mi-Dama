@@ -57,6 +57,23 @@ public final class RedactItem: Identifiable {
 
     public var size: CGSize { source.extent.size }
     public var enabledCount: Int { findings.filter(\.isEnabled).count }
+
+    /// 各类别的数量和是否有勾选；数量相同时按类别固定顺序，避免点选后标签跳来跳去
+    public var kindCounts: [(kind: FindingKind, count: Int, enabled: Bool)] {
+        Dictionary(grouping: findings, by: \.kind)
+            .map { ($0.key, $0.value.count, $0.value.contains(where: \.isEnabled)) }
+            .sorted { $0.count != $1.count ? $0.count > $1.count : $0.kind.rawValue < $1.kind.rawValue }
+    }
+
+    /// 按 id 修改一处（不用 ForEach 的绑定，避免删除时越界）
+    public func updateFinding(_ id: UUID, _ change: (inout Finding) -> Void) {
+        if let i = findings.firstIndex(where: { $0.id == id }) { change(&findings[i]) }
+    }
+
+    /// 整个类别一起开 / 关
+    public func setFindings(of kind: FindingKind, enabled: Bool) {
+        for i in findings.indices where findings[i].kind == kind { findings[i].isEnabled = enabled }
+    }
     public var isDetecting: Bool { phase == .pending || phase == .detecting }
 
     // MARK: - 图像

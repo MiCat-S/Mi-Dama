@@ -41,10 +41,7 @@ public struct ItemRow: View {
     }
 
     private var summary: String {
-        Dictionary(grouping: item.findings, by: \.kind)
-            .sorted { $0.value.count != $1.value.count ? $0.value.count > $1.value.count : $0.key.rawValue < $1.key.rawValue }
-            .map { "\($0.key.label) \($0.value.count)" }
-            .joined(separator: " · ")
+        item.kindCounts.map { "\($0.kind.label) \($0.count)" }.joined(separator: " · ")
     }
 }
 #endif

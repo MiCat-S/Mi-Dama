@@ -18,7 +18,7 @@ final class PhotoLibrary {
     }
 
     private(set) var status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
-    private(set) var assets = PHFetchResult<PHAsset>()
+    private(set) var assets = AssetList()
     var filter: Filter = .all { didSet { refetch() } }
     @ObservationIgnored let thumbnails = PHCachingImageManager()
     @ObservationIgnored private var observer: ChangeObserver?
@@ -40,7 +40,7 @@ final class PhotoLibrary {
         let new = PHPhotoLibrary.authorizationStatus(for: .readWrite)
         guard new != status else { return }
         status = new
-        if isAuthorized { start() } else { assets = PHFetchResult() }
+        if isAuthorized { start() } else { assets = AssetList() }
     }
 
     private func start() {
@@ -54,7 +54,7 @@ final class PhotoLibrary {
 
     private func refetch() {
         guard isAuthorized else { return }
-        assets = PHAsset.fetchAssets(with: Self.options(for: filter))
+        assets = AssetList(PHAsset.fetchAssets(with: Self.options(for: filter)))
     }
 
     private static func options(for filter: Filter) -> PHFetchOptions {
@@ -125,6 +125,20 @@ final class PhotoLibrary {
         while let presented = top.presentedViewController { top = presented }
         PHPhotoLibrary.shared().presentLimitedLibraryPicker(from: top)
     }
+}
+
+/// 让 PHFetchResult 能直接用于 ForEach（按 localIdentifier 标识，新照片进来时格子不会错位）；
+/// 元素按需从 PhotoKit 取，不会一次性把整个相册读进内存
+struct AssetList: RandomAccessCollection {
+    private let result: PHFetchResult<PHAsset>
+
+    init(_ result: PHFetchResult<PHAsset> = PHFetchResult()) {
+        self.result = result
+    }
+
+    var startIndex: Int { 0 }
+    var endIndex: Int { result.count }
+    subscript(position: Int) -> PHAsset { result.object(at: position) }
 }
 
 /// PhotoKit 的回调在后台线程，这里只转发一个"有变化"的信号

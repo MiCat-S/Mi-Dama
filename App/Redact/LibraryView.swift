@@ -77,44 +77,34 @@ struct LibraryView: View {
 
     // MARK: - 内容
 
+    /// 权限状态决定整页内容：这是真正不同的三种页面，所以按状态切换
     @ViewBuilder
     private var content: some View {
         switch library.status {
         case .notDetermined:
-            onboarding
+            PermissionPromptView(kind: .onboarding, onRequestAccess: requestAccess,
+                                 onOpenSettings: openSettings, onPickManually: { showPicker = true })
         case .denied, .restricted:
-            deniedView
+            PermissionPromptView(kind: .denied, onRequestAccess: requestAccess,
+                                 onOpenSettings: openSettings, onPickManually: { showPicker = true })
         default:
             VStack(spacing: 0) {
-                if library.status == .limited { limitedBanner }
+                if library.status == .limited { LimitedAccessBanner(onChooseMore: library.presentLimitedPicker) }
                 Picker("范围", selection: $library.filter) {
                     ForEach(PhotoLibrary.Filter.allCases) { Text($0.label).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 .padding(.horizontal)
                 .padding(.vertical, 8)
-                if library.assets.count == 0 {
-                    emptyLibrary
-                } else {
-                    grid
-                }
+                PhotoGrid(library: library, selection: selection, onTap: tap)
             }
         }
     }
 
-    private var grid: some View {
-        GeometryReader { geo in
-            let side = (geo.size.width - 4) / 3
-            ScrollView {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 2), count: 3), spacing: 2) {
-                    ForEach(0..<library.assets.count, id: \.self) { index in
-                        let asset = library.assets.object(at: index)
-                        AssetCell(asset: asset, library: library, side: side,
-                                  selectionIndex: selection.firstIndex(of: asset.localIdentifier))
-                            .onTapGesture { tap(asset) }
-                    }
-                }
-            }
+    private func requestAccess() {
+        Task {
+            await library.requestAccess()
+            openLatest(onlyIfNew: false)
         }
     }
 
@@ -157,61 +147,10 @@ struct LibraryView: View {
                     selection = []
                     path.append(.review(keys))
                 }
-                .buttonStyle(.borderedProminent)
+                .primaryActionStyle()
                 .disabled(selection.isEmpty)
             }
         }
-    }
-
-    // MARK: - 权限状态
-
-    private var onboarding: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "eye.slash.circle.fill").font(.system(size: 64)).foregroundStyle(.tint)
-            Text("自动找出截图里的敏感信息").font(.title3.bold())
-            Text("允许访问相册后，打开 App 会直接进入最新的截图并开始识别。\n可以选择允许全部照片，或只允许部分照片。\n图片只在本机处理，不会上传。")
-                .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
-            Button("允许访问相册") { Task { await library.requestAccess(); openLatest(onlyIfNew: false) } }
-                .buttonStyle(.borderedProminent)
-        }
-        .padding()
-    }
-
-    private var deniedView: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "photo.badge.exclamationmark").font(.system(size: 56)).foregroundStyle(.secondary)
-            Text("没有相册访问权限").font(.title3.bold())
-            Text("开启后，打开 App 会直接进入最新的截图。\n也可以不开启，每次手动选择图片。")
-                .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
-            Button("去设置开启") { openSettings() }.buttonStyle(.borderedProminent)
-            Button("手动选择图片") { showPicker = true }.buttonStyle(.bordered)
-        }
-        .padding()
-    }
-
-    private var limitedBanner: some View {
-        HStack {
-            Image(systemName: "lock.fill").foregroundStyle(.secondary)
-            Text("只能看到你允许的照片").font(.footnote).foregroundStyle(.secondary)
-            Spacer()
-            Button("选择更多") { library.presentLimitedPicker() }.font(.footnote)
-        }
-        .padding(.horizontal)
-        .padding(.vertical, 8)
-        .background(Color.secondary.opacity(0.08))
-    }
-
-    private var emptyLibrary: some View {
-        ContentUnavailableView {
-            Label(library.status == .limited ? "还没有允许访问的照片" : "相册里还没有图片", systemImage: "photo")
-        } description: {
-            Text(library.filter == .screenshots ? "截一张图后回到这里。" : "")
-        } actions: {
-            if library.status == .limited {
-                Button("选择照片") { library.presentLimitedPicker() }.buttonStyle(.borderedProminent)
-            }
-        }
-        .frame(maxHeight: .infinity)
     }
 
     private func openSettings() {
@@ -234,45 +173,5 @@ struct LibraryView: View {
         guard !keys.isEmpty else { return }
         selecting = false
         path.append(.review(keys))
-    }
-}
-
-/// 相册网格里的一格：缩略图 + 多选序号 + "已打码"标记（本 App 导出的图）
-private struct AssetCell: View {
-    let asset: PHAsset
-    let library: PhotoLibrary
-    let side: CGFloat
-    let selectionIndex: Int?
-    @State private var image: UIImage?
-    @State private var isOutput = false
-    @Environment(\.displayScale) private var scale
-
-    var body: some View {
-        Color.secondary.opacity(0.12)
-            .frame(width: side, height: side)
-            .overlay {
-                if let image { Image(uiImage: image).resizable().scaledToFill() }
-            }
-            .clipped()
-            .overlay(alignment: .bottomLeading) {
-                if isOutput {
-                    Text("已打码").font(.system(size: 10, weight: .semibold)).padding(.horizontal, 4).padding(.vertical, 1)
-                        .background(.black.opacity(0.55), in: Capsule()).foregroundStyle(.white).padding(4)
-                }
-            }
-            .overlay(alignment: .topTrailing) {
-                if let selectionIndex {
-                    Text("\(selectionIndex + 1)").font(.caption.bold()).foregroundStyle(.white)
-                        .frame(width: 22, height: 22).background(Color.accentColor, in: Circle()).padding(4)
-                }
-            }
-            .overlay {
-                if selectionIndex != nil { Rectangle().stroke(Color.accentColor, lineWidth: 3) }
-            }
-            .contentShape(Rectangle())
-            .task(id: asset.localIdentifier) {
-                image = await library.thumbnail(for: asset, side: side * scale)
-                isOutput = PhotoLibrary.isRedactedOutput(asset)
-            }
     }
 }
