@@ -9,16 +9,50 @@
 /* Begin PBXBuildFile section */
 		AA0000000000000000000001 /* RedactKit in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000000002 /* RedactKit */; };
 		AA0000000000000000000004 /* RedactUI in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000000005 /* RedactUI */; };
+		AA0000000000000000000101 /* RedactKit in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000000102 /* RedactKit */; };
+		AA0000000000000000000103 /* RedactUI in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000000104 /* RedactUI */; };
+		AA0000000000000000000105 /* RedactShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000110 /* RedactShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		AA0000000000000000000106 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AA0000000000000000000070 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA0000000000000000000120;
+			remoteInfo = RedactShare;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		AA0000000000000000000107 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				AA0000000000000000000105 /* RedactShare.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		AA0000000000000000000010 /* Redact.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Redact.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA0000000000000000000110 /* RedactShare.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RedactShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA0000000000000000000113 /* RedactShareInfo.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = RedactShareInfo.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		AA0000000000000000000020 /* Redact */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Redact;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000111 /* RedactShare */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = RedactShare;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -33,6 +67,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AA0000000000000000000112 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA0000000000000000000101 /* RedactKit in Frameworks */,
+				AA0000000000000000000103 /* RedactUI in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -40,6 +83,8 @@
 			isa = PBXGroup;
 			children = (
 				AA0000000000000000000020 /* Redact */,
+				AA0000000000000000000111 /* RedactShare */,
+				AA0000000000000000000113 /* RedactShareInfo.plist */,
 				AA0000000000000000000041 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -48,6 +93,7 @@
 			isa = PBXGroup;
 			children = (
 				AA0000000000000000000010 /* Redact.app */,
+				AA0000000000000000000110 /* RedactShare.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -62,10 +108,12 @@
 				AA0000000000000000000051 /* Sources */,
 				AA0000000000000000000030 /* Frameworks */,
 				AA0000000000000000000052 /* Resources */,
+				AA0000000000000000000107 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				AA0000000000000000000108 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				AA0000000000000000000020 /* Redact */,
@@ -79,6 +127,30 @@
 			productReference = AA0000000000000000000010 /* Redact.app */;
 			productType = "com.apple.product-type.application";
 		};
+		AA0000000000000000000120 /* RedactShare */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA0000000000000000000130 /* Build configuration list for PBXNativeTarget "RedactShare" */;
+			buildPhases = (
+				AA0000000000000000000121 /* Sources */,
+				AA0000000000000000000112 /* Frameworks */,
+				AA0000000000000000000122 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				AA0000000000000000000111 /* RedactShare */,
+			);
+			name = RedactShare;
+			packageProductDependencies = (
+				AA0000000000000000000102 /* RedactKit */,
+				AA0000000000000000000104 /* RedactUI */,
+			);
+			productName = RedactShare;
+			productReference = AA0000000000000000000110 /* RedactShare.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -90,6 +162,9 @@
 				LastUpgradeCheck = 2700;
 				TargetAttributes = {
 					AA0000000000000000000050 = {
+						CreatedOnToolsVersion = 27.0;
+					};
+					AA0000000000000000000120 = {
 						CreatedOnToolsVersion = 27.0;
 					};
 				};
@@ -113,12 +188,20 @@
 			projectRoot = "";
 			targets = (
 				AA0000000000000000000050 /* Redact */,
+				AA0000000000000000000120 /* RedactShare */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		AA0000000000000000000052 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA0000000000000000000122 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -135,7 +218,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AA0000000000000000000121 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		AA0000000000000000000108 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA0000000000000000000120 /* RedactShare */;
+			targetProxy = AA0000000000000000000106 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		AA0000000000000000000080 /* Debug */ = {
@@ -224,6 +322,54 @@
 			};
 			name = Release;
 		};
+		AA0000000000000000000131 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RedactShareInfo.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "截图打码";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "把打码后的图片保存到相册（只添加，不读取你的照片）";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.redact.share;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		AA0000000000000000000132 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RedactShareInfo.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "截图打码";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "把打码后的图片保存到相册（只添加，不读取你的照片）";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.redact.share;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -245,6 +391,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		AA0000000000000000000130 /* Build configuration list for PBXNativeTarget "RedactShare" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000000000000000000131 /* Debug */,
+				AA0000000000000000000132 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
@@ -260,6 +415,14 @@
 			productName = RedactKit;
 		};
 		AA0000000000000000000005 /* RedactUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = RedactUI;
+		};
+		AA0000000000000000000102 /* RedactKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = RedactKit;
+		};
+		AA0000000000000000000104 /* RedactUI */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = RedactUI;
 		};

@@ -45,10 +45,13 @@ struct ExportOptionsSheet: View {
                     Text("导出的图片只保留像素，不含位置、设备、拍摄时间等信息。")
                 }
 
-                Section {
-                    Toggle("保存后删除原图", isOn: $settings.deleteOriginal)
-                } footer: {
-                    Text("保存打码后的图片后，把相册里的原图移到「最近删除」，系统会先请你确认。需要允许「完全访问」照片；受限访问时无法删除。")
+                // 分享扩展里的图片不是从相册选的，没有原图可删
+                if item.assetIdentifier != nil {
+                    Section {
+                        Toggle("保存后删除原图", isOn: $settings.deleteOriginal)
+                    } footer: {
+                        Text("保存打码后的图片后，把相册里的原图移到「最近删除」，系统会先请你确认。需要允许「完全访问」照片；受限访问时无法删除。")
+                    }
                 }
             }
             .navigationTitle("导出选项")

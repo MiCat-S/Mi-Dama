@@ -35,7 +35,7 @@ public struct ReviewView: View {
             }
             controls
         }
-        .navigationTitle(item.findings.isEmpty ? "未发现敏感信息" : "已勾选 \(item.enabledCount) / \(item.findings.count)")
+        .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
@@ -75,6 +75,14 @@ public struct ReviewView: View {
     private var renderKey: String {
         "\(showPreview)-\(item.styleOverride?.rawValue ?? "auto")-\(item.fillColorHex)-\(watermarkKey)-"
             + item.findings.map { "\($0.id)\($0.isEnabled)\($0.style?.rawValue ?? "")" }.joined()
+    }
+
+    private var title: String {
+        switch item.phase {
+        case .detecting: "识别中…"
+        case .cancelled: "未识别"
+        default: item.findings.isEmpty ? "未发现敏感信息" : "已勾选 \(item.enabledCount) / \(item.findings.count)"
+        }
     }
 
     private var watermarkKey: String { String(describing: settings.activeWatermark) }

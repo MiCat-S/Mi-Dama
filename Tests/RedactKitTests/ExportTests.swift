@@ -62,6 +62,27 @@ struct ExportTests {
         #expect(px.rgb(0, 0).x > 250 && px.rgb(199, 149).x > 250)
     }
 
+    @Test func 截图与照片的判断() throws {
+        func encode(_ type: String, _ props: [CFString: Any]) -> Data {
+            let cg = CIContext().createCGImage(solidImage(width: 8, height: 8), from: CGRect(x: 0, y: 0, width: 8, height: 8))!
+            let out = NSMutableData()
+            let d = CGImageDestinationCreateWithData(out, type as CFString, 1, nil)!
+            CGImageDestinationAddImage(d, cg, props as CFDictionary)
+            CGImageDestinationFinalize(d)
+            return out as Data
+        }
+        func judge(_ data: Data) -> Bool {
+            ImageKind.isLikelyScreenshot(data: data, properties: CIImage(data: data)!.properties)
+        }
+        #expect(judge(encode("public.png", [:])))
+        // 「照片」把截图转码成 JPEG 分享：没有快门 / 光圈
+        #expect(judge(encode("public.jpeg", [:])))
+        #expect(judge(encode("public.jpeg", [kCGImagePropertyExifDictionary: [kCGImagePropertyExifUserComment: "Screenshot"]])))
+        // 相机照片
+        #expect(!judge(encode("public.jpeg", [kCGImagePropertyExifDictionary: [
+            kCGImagePropertyExifExposureTime: 1.0 / 120, kCGImagePropertyExifFNumber: 1.78]])))
+    }
+
     @Test(arguments: [ExportFormat.jpeg(quality: 0.9), .heic(quality: 0.9), .png])
     func 各种格式都不带元数据(format: ExportFormat) throws {
         // 造一张带 GPS、拍摄时间、机型的 JPEG 作为原图

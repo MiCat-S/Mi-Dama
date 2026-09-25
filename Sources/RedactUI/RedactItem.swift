@@ -15,7 +15,7 @@ public final class RedactItem: Identifiable {
 
     public let id = UUID()
     public let source: CIImage
-    /// PNG 视为截图（"自动"格式下导出 PNG）；其余视为照片（导出 HEIC）
+    /// 截图（"自动"格式下导出无损 PNG）还是相机照片（导出 HEIC）
     public let isScreenshot: Bool
     public let displayImage: UIImage
     /// 原图自带的元数据（{TIFF} {Exif} {GPS} 等），仅用于"查看 EXIF"，导出时一律丢弃
@@ -38,7 +38,7 @@ public final class RedactItem: Identifiable {
         let display = maxDisplaySide.map { ExportSize.maxSide($0).apply(to: image) } ?? image
         guard let cg = Self.context.createCGImage(display, from: display.extent) else { return nil }
         source = image
-        isScreenshot = data.starts(with: [0x89, 0x50, 0x4E, 0x47])
+        isScreenshot = ImageKind.isLikelyScreenshot(data: data, properties: raw.properties)
         displayImage = UIImage(cgImage: cg)
         metadata = raw.properties
         self.assetIdentifier = assetIdentifier
