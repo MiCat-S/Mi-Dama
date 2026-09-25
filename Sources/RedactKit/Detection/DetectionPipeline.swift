@@ -1,6 +1,17 @@
 // 识别总入口：Vision → 文本规则 → 聊天布局 → 合并去重
 import CoreImage
 
+/// 一行 OCR 文字（原图像素坐标，左上原点）：编辑器的"文字"工具点一下就能盖住整行
+public struct TextLine: Hashable, Sendable {
+    public let rect: CGRect
+    public let text: String
+}
+
+public struct DetectionResult: Sendable {
+    public let findings: [Finding]
+    public let textLines: [TextLine]
+}
+
 public struct DetectionPipeline {
     let context: CIContext
 
@@ -11,6 +22,11 @@ public struct DetectionPipeline {
     /// - Parameter image: 已按方向校正的原图（`CIImage(contentsOf:options:[.applyOrientationProperty: true])`）
     /// - Returns: 原图像素坐标（左上原点）的待打码区域
     public func detect(_ image: CIImage) throws -> [Finding] {
+        try analyze(image).findings
+    }
+
+    /// 识别结果 + 所有 OCR 文字行
+    public func analyze(_ image: CIImage) throws -> DetectionResult {
         let image = image.transformed(by: CGAffineTransform(translationX: -image.extent.minX, y: -image.extent.minY))
         let size = image.extent.size
         let vision = try VisionDetector.detect(image)
@@ -29,7 +45,8 @@ public struct DetectionPipeline {
         findings.removeAll { f in
             f.kind == .face && avatars.contains { $0.intersection(f.rect).area > f.rect.area * 0.6 }
         }
-        return deduplicate(findings).sorted { ($0.rect.minY, $0.rect.minX) < ($1.rect.minY, $1.rect.minX) }
+        let sorted = deduplicate(findings).sorted { ($0.rect.minY, $0.rect.minX) < ($1.rect.minY, $1.rect.minX) }
+        return DetectionResult(findings: sorted, textLines: vision.lines.map { TextLine(rect: $0.rect, text: $0.text) })
     }
 
     /// 文本规则命中 → 字符级框；"收货人" 这类单独一行的标签，把同一行右侧的文字当作值

@@ -5,7 +5,7 @@ import SwiftUI
 import UIKit
 
 struct ZoomableView<Content: View>: UIViewRepresentable {
-    /// 内容高 / 宽；内容宽度始终等于可视宽度（1x 时与原来的"按宽适配"一致）
+    /// 内容高 / 宽；1x 时等比适配到可视区域
     let aspect: CGFloat
     /// 手动画框时关掉单指拖动，让拖拽交给 SwiftUI 画框手势（双指缩放仍然可用）
     let isScrollEnabled: Bool
@@ -25,9 +25,12 @@ struct ZoomableView<Content: View>: UIViewRepresentable {
         scrollView.bouncesZoom = true
         scrollView.showsHorizontalScrollIndicator = false
         scrollView.contentInsetAdjustmentBehavior = .never
+        scrollView.backgroundColor = .clear
+        scrollView.showsVerticalScrollIndicator = false
 
         let host = context.coordinator.host
         host.view.backgroundColor = .clear
+        host.view.clipsToBounds = false   // 卡片阴影画在宿主视图外面
         host.safeAreaRegions = []
         scrollView.addSubview(host.view)
         scrollView.hostView = host.view
@@ -84,14 +87,24 @@ final class ZoomScrollView: UIScrollView {
     weak var hostView: UIView?
     var aspect: CGFloat = 1
     var extraBottomInset: CGFloat = 0
+    /// 图片四周至少留出的空白（露出画板背景）
+    var margin: CGFloat = 16
     private var baseSize: CGSize = .zero
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        guard let hostView, bounds.width > 0 else { return }
-        let size = CGSize(width: bounds.width, height: (bounds.width * aspect).rounded())
+        guard let hostView, bounds.width > 0, bounds.height > 0 else { return }
+        // 1x 时整张图完整显示在"面板以上"的区域里（等比适配），放大后再看细节
+        let available = CGSize(width: bounds.width - margin * 2,
+                               height: bounds.height - extraBottomInset - margin * 2)
+        guard available.width > 0, available.height > 0 else { return }
+        var size = CGSize(width: available.width, height: available.width * aspect)
+        if size.height > available.height {
+            size = CGSize(width: available.height / aspect, height: available.height)
+        }
+        size = CGSize(width: size.width.rounded(), height: size.height.rounded())
         if size != baseSize {
-            // 宽度或图片变了：回到 1x 重新布局
+            // 可视区或图片变了：回到 1x 重新布局
             baseSize = size
             zoomScale = 1
             hostView.frame = CGRect(origin: .zero, size: size)
@@ -100,11 +113,11 @@ final class ZoomScrollView: UIScrollView {
         centerContent()
     }
 
-    /// 内容比可视区小时在"面板以上"的区域里居中；比可视区大时底部多留出面板高度
+    /// 内容在"面板以上"的区域里居中，四周至少留 margin；放大后底部多留出面板高度
     func centerContent() {
         let visibleHeight = bounds.height - extraBottomInset
-        let dx = max(0, (bounds.width - contentSize.width) / 2)
-        let dy = max(0, (visibleHeight - contentSize.height) / 2)
+        let dx = max(margin, (bounds.width - contentSize.width) / 2)
+        let dy = max(margin, (visibleHeight - contentSize.height) / 2)
         let inset = UIEdgeInsets(top: dy, left: dx, bottom: dy + extraBottomInset, right: dx)
         if contentInset != inset {
             contentInset = inset

@@ -26,10 +26,13 @@ public final class RedactItem: Identifiable {
     public let assetIdentifier: String?
     /// 原文件名（用来给导出文件起名）
     public var originalFilename: String?
-    public var findings: [Finding] = []
+    /// 所有识别到 / 手动添加的区域。修改请走 edit(_:) 等方法，才能撤销
+    public private(set) var findings: [Finding] = []
+    /// OCR 识别出的所有文字行（"文字"工具点一下盖住一整行）
+    public private(set) var textLines: [TextLine] = []
     public var phase: Phase = .pending
     /// 全局效果；nil = 自动（按类别选默认效果）。单处在 Finding.style 里另外指定
-    public var styleOverride: MaskStyle? = Preferences.style
+    public private(set) var styleOverride: MaskStyle? = Preferences.style
     /// 色块、杂讯色块的颜色
     public var fillColorHex: String = Preferences.colorHex
     /// 屏幕显示用图（长边不超过 maxDisplaySide），离开审核页时释放
@@ -40,6 +43,7 @@ public final class RedactItem: Identifiable {
     /// 显示用图的长边上限：截图基本不缩（iPhone 截图长边 < 3000），大照片缩小以省内存
     @ObservationIgnored let maxDisplaySide: CGFloat
     @ObservationIgnored private var detectTask: Task<Void, Never>?
+    private var history = EditHistory<EditState>()
     @ObservationIgnored private var displayTask: Task<Void, Never>?
 
     /// CIContext 线程安全，后台渲染共用一个
@@ -65,15 +69,95 @@ public final class RedactItem: Identifiable {
             .sorted { $0.count != $1.count ? $0.count > $1.count : $0.kind.rawValue < $1.kind.rawValue }
     }
 
-    /// 按 id 修改一处（不用 ForEach 的绑定，避免删除时越界）
+    // MARK: - 编辑（全部可撤销）
+
+    /// 撤销 / 重做覆盖的内容：所有区域的勾选、样式、位置，以及全局效果
+    struct EditState: Equatable {
+        var findings: [Finding]
+        var style: MaskStyle?
+    }
+
+    private var editState: EditState { EditState(findings: findings, style: styleOverride) }
+
+    public var canUndo: Bool { history.canUndo }
+    public var canRedo: Bool { history.canRedo }
+
+    /// 一次可撤销的编辑
+    public func edit(_ change: (inout [Finding]) -> Void) {
+        let before = editState
+        change(&findings)
+        history.record(before: before, after: editState)
+    }
+
+    public func undo() {
+        if let state = history.undo(current: editState) { apply(state) }
+    }
+
+    public func redo() {
+        if let state = history.redo(current: editState) { apply(state) }
+    }
+
+    private func apply(_ state: EditState) {
+        findings = state.findings
+        styleOverride = state.style
+    }
+
+    /// 按 id 修改一处
     public func updateFinding(_ id: UUID, _ change: (inout Finding) -> Void) {
-        if let i = findings.firstIndex(where: { $0.id == id }) { change(&findings[i]) }
+        edit { findings in
+            if let i = findings.firstIndex(where: { $0.id == id }) { change(&findings[i]) }
+        }
     }
 
     /// 整个类别一起开 / 关
     public func setFindings(of kind: FindingKind, enabled: Bool) {
-        for i in findings.indices where findings[i].kind == kind { findings[i].isEnabled = enabled }
+        edit { findings in
+            for i in findings.indices where findings[i].kind == kind { findings[i].isEnabled = enabled }
+        }
     }
+
+    public func addFinding(_ finding: Finding) {
+        edit { $0.append(finding) }
+    }
+
+    public func removeFinding(_ id: UUID) {
+        edit { $0.removeAll { $0.id == id } }
+    }
+
+    /// 全局效果
+    /// - Parameter remember: 记住作为下次的默认（快捷指令里临时指定效果时传 false）
+    public func setStyle(_ style: MaskStyle?, remember: Bool = true) {
+        let before = editState
+        styleOverride = style
+        if remember { Preferences.style = style }
+        history.record(before: before, after: editState)
+    }
+
+    /// 自动识别出的区域（手动添加的不算）是否有任何一处在打码
+    public var isAutoRedactionOn: Bool {
+        findings.contains { $0.kind != .manual && $0.isEnabled }
+    }
+
+    /// 自动打码总开关：关 = 所有自动识别的区域都不打码；开 = 恢复默认勾选（置信度足够的）
+    public func setAutoRedaction(_ on: Bool) {
+        edit { findings in
+            for i in findings.indices where findings[i].kind != .manual {
+                findings[i].isEnabled = on && findings[i].confidence >= 0.5
+            }
+        }
+    }
+
+    /// 文字工具：点中的那一行已有整行打码就开 / 关它，否则加一个盖住整行的区域
+    public func toggleTextLine(at point: CGPoint) {
+        guard let line = textLines.filter({ $0.rect.insetBy(dx: -4, dy: -4).contains(point) })
+            .min(by: { $0.rect.area < $1.rect.area }) else { return }
+        if let existing = findings.first(where: { $0.kind == .manual && $0.rect.iou(line.rect) > 0.8 }) {
+            updateFinding(existing.id) { $0.isEnabled.toggle() }
+        } else {
+            addFinding(Finding(kind: .manual, rect: line.rect, confidence: 1, text: line.text))
+        }
+    }
+
     public var isDetecting: Bool { phase == .pending || phase == .detecting }
 
     // MARK: - 图像
@@ -129,9 +213,13 @@ public final class RedactItem: Identifiable {
         phase = .detecting
         let source = self.source
         do {
-            findings = try await Task.detached(priority: .userInitiated) {
-                try DetectionPipeline().detect(source)
+            let result = try await Task.detached(priority: .userInitiated) {
+                try DetectionPipeline().analyze(source)
             }.value
+            // 识别结果是起点，不算一次编辑
+            findings = result.findings
+            textLines = result.textLines
+            history.reset()
             phase = .ready
         } catch {
             phase = .failed(error.localizedDescription)

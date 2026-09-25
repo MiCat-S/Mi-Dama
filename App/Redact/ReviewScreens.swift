@@ -6,13 +6,15 @@ import SwiftUI
 struct ReviewContainer: View {
     let key: String
     let store: ItemStore
+    /// 为 nil 时由编辑页处理（成功后返回相册）
+    var onSaved: ((SaveReport) -> Void)?
     @State private var item: RedactItem?
     @State private var failed = false
 
     var body: some View {
         Group {
             if let item {
-                ReviewView(item: item)
+                ReviewView(item: item, onSaved: onSaved)
             } else if failed {
                 ContentUnavailableView("无法读取这张图片", systemImage: "exclamationmark.triangle",
                                        description: Text("图片可能已被删除，或还在从 iCloud 下载。"))
@@ -44,7 +46,7 @@ struct BatchReviewView: View {
     }
 
     var body: some View {
-        ReviewContainer(key: current, store: store)
+        ReviewContainer(key: current, store: store, onSaved: savedCurrent)
             .id(current)
             .safeAreaInset(edge: .top, spacing: 0) { strip }
             // 当前这张由审核页负责识别；其余的在后台依次识别，离开页面时自动停止
@@ -62,6 +64,22 @@ struct BatchReviewView: View {
             }
             .reportAlert($report)
             .sensoryFeedback(.selection, trigger: current)
+    }
+
+    /// ✓ 保存了当前这张：跳到下一张还没保存的；全部保存完就提示
+    private func savedCurrent(_ result: SaveReport) {
+        guard result.outcome == .success else {
+            report = result
+            return
+        }
+        let unsaved = keys.filter { store.cached($0)?.phase != .saved }
+        if let next = unsaved.first(where: { key in
+            keys.firstIndex(of: key)! > keys.firstIndex(of: current)!
+        }) ?? unsaved.first {
+            current = next
+        } else {
+            report = SaveReport(message: "\(keys.count) 张都已保存", outcome: .success)
+        }
     }
 
     private var strip: some View {

@@ -32,7 +32,7 @@ struct RedactImagesIntent: AppIntent {
             }
             await item.detect()
             if case .failed(let reason) = item.phase { throw RedactIntentError.detectionFailed(reason) }
-            if let chosen = style.maskStyle(fallback: item.styleOverride) { item.styleOverride = chosen } else { item.styleOverride = nil }
+            item.setStyle(style.maskStyle(fallback: item.styleOverride), remember: false)
             let export = item.export
             let data = try await Task.detached(priority: .userInitiated) { try export.data() }.value
             outputs.append(IntentFile(data: data, filename: export.outputFilename, type: export.format.utType))

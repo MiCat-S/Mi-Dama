@@ -23,6 +23,18 @@ struct ChatLayoutTests {
         }
     }
 
+    @Test func 返回文字行供文字工具使用() throws {
+        let synth = ChatSynth.render(SynthConfig(widthPx: 1170, scale: 3, seed: 105))
+        let image = CIImage(cgImage: synth.image)
+        let result = try DetectionPipeline().analyze(image)
+        #expect(result.textLines.count >= 5)
+        #expect(result.textLines.allSatisfy { image.extent.contains($0.rect.insetBy(dx: 2, dy: 2)) })
+        // 标注的昵称都能在文字行里找到对应的行
+        for nick in synth.labels.filter({ $0.kind == "nickname" }).map(\.rect) {
+            #expect(result.textLines.contains { $0.rect.intersects(nick) })
+        }
+    }
+
     @Test func 普通照片不做聊天布局分析() throws {
         // 渐变图：没有统一的页面背景色，不应该冒出头像 / 昵称
         let gradient = CIFilter(name: "CILinearGradient", parameters: [

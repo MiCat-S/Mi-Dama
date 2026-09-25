@@ -1,85 +1,147 @@
-// 审核页底部浮动面板：类别开关 + 识别框 / 打码效果切换 + 效果按钮 + 手动框选
+// 编辑页底部工具栏（仿 DAMA）：
+//  [自动打码开关]   [当前效果 ⌃ | 文字 | 马克笔]   [颜色]
+//  · 自动打码：点一下全部开 / 关；长按按类别开关
+//  · 效果：点开向上弹出的菜单，每项带真实效果小样
+//  · 颜色：色块、杂讯色块用的颜色
 #if canImport(UIKit)
 import RedactKit
 import SwiftUI
 
-struct ReviewControls: View {
-    @Bindable var item: RedactItem
-    @Binding var showPreview: Bool
-    @Binding var drawing: Bool
-    let onShowEffects: () -> Void
+struct ReviewBottomBar: View {
+    let item: RedactItem
+    @Binding var tool: EditTool?
+    @Binding var colorHex: String
     let onEdit: () -> Void
 
     var body: some View {
-        VStack(spacing: 10) {
-            CategoryChips(item: item, onEdit: onEdit)
-            HStack {
-                Picker("显示", selection: $showPreview) {
-                    Text("识别框").tag(false)
-                    Text("打码效果").tag(true)
-                }
-                .pickerStyle(.segmented)
-                EffectButton(style: item.styleOverride, colorHex: item.fillColorHex, action: onShowEffects)
-                Toggle(isOn: $drawing) { Image(systemName: "rectangle.dashed.badge.record") }
-                    .toggleStyle(.button)
-                    .accessibilityLabel("手动框选")
+        HStack(alignment: .center) {
+            AutoRedactButton(item: item, onEdit: onEdit)
+            Spacer(minLength: 12)
+            HStack(spacing: 4) {
+                EffectMenu(item: item, colorHex: colorHex, onEdit: onEdit)
+                ToolButton(tool: .text, systemImage: "textformat", label: "文字", selection: $tool)
+                ToolButton(tool: .marker, systemImage: "highlighter", label: "马克笔", selection: $tool)
             }
-            .padding(.horizontal)
+            .padding(.horizontal, 8)
+            .frame(height: 56)
+            .glassCapsule()
+            Spacer(minLength: 12)
+            FillColorButton(colorHex: $colorHex, isEnabled: item.styleOverride?.usesColor ?? false)
         }
-        .padding(.vertical, 10)
-        .floatingPanel(.bottom)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
     }
 }
 
-/// 每个类别一个标签，点一下整组开 / 关；面板本身已是玻璃，标签用实心浅色填充
-struct CategoryChips: View {
+/// 左侧圆形按钮：自动打码总开关
+struct AutoRedactButton: View {
     let item: RedactItem
     let onEdit: () -> Void
 
     var body: some View {
-        let counts = item.kindCounts
-        if !counts.isEmpty {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack {
-                    ForEach(counts, id: \.kind) { entry in
-                        Button {
-                            item.setFindings(of: entry.kind, enabled: !entry.enabled)
-                            onEdit()
-                        } label: {
-                            Text("\(entry.kind.label) \(entry.count)")
-                                .font(.footnote.weight(.medium))
-                                .padding(.horizontal, 10).padding(.vertical, 6)
-                                .background(entry.enabled ? entry.kind.tint.opacity(0.18) : Color.secondary.opacity(0.1), in: Capsule())
-                                .foregroundStyle(entry.enabled ? entry.kind.tint : .secondary)
-                        }
-                        .animation(.easeOut(duration: 0.15), value: entry.enabled)
-                        .accessibilityAddTraits(entry.enabled ? .isSelected : [])
-                    }
-                }
-                .padding(.horizontal)
+        let on = item.isAutoRedactionOn
+        Menu {
+            // 长按：按类别开关（原来的类别标签搬到这里）
+            ForEach(item.kindCounts.filter { $0.kind != .manual }, id: \.kind) { entry in
+                Toggle("\(entry.kind.label)（\(entry.count)）", isOn: Binding(
+                    get: { entry.enabled },
+                    set: { item.setFindings(of: entry.kind, enabled: $0); onEdit() }
+                ))
             }
+        } label: {
+            Image(systemName: on ? "wand.and.sparkles" : "wand.and.sparkles.inverse")
+                .font(.title3)
+                .foregroundStyle(on ? .white : .secondary)
+                .frame(width: 56, height: 56)
+                .glassCircle(tint: on ? .green : nil)
+        } primaryAction: {
+            item.setAutoRedaction(!on)
+            onEdit()
         }
+        .disabled(item.isDetecting)
+        .accessibilityLabel(on ? "自动打码：开" : "自动打码：关")
+        .accessibilityHint("点按全部开关，长按按类别开关")
     }
 }
 
-/// 当前打码效果：缩略图 + 名称，点开效果面板
-struct EffectButton: View {
-    let style: MaskStyle?
+/// 当前效果 + 向上弹出的效果菜单
+struct EffectMenu: View {
+    let item: RedactItem
     let colorHex: String
-    let action: () -> Void
-    @ScaledMetric(relativeTo: .footnote) private var thumbWidth: CGFloat = 32
+    let onEdit: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                Image(uiImage: EffectPreview.image(style, colorHex: colorHex))
-                    .resizable().frame(width: thumbWidth, height: thumbWidth * 0.375)
-                    .clipShape(RoundedRectangle(cornerRadius: 3))
-                Text(style?.label ?? "自动").font(.footnote.weight(.medium)).lineLimit(1)
+        Menu {
+            Picker("打码效果", selection: Binding(get: { item.styleOverride },
+                                               set: { item.setStyle($0); onEdit() })) {
+                row(nil, "自动")
+                ForEach(MaskStyle.allCases, id: \.self) { row($0, $0.label) }
             }
+        } label: {
+            HStack(spacing: 4) {
+                Image(uiImage: EffectPreview.swatch(item.styleOverride, colorHex: colorHex, side: 28))
+                    .resizable()
+                    .frame(width: 30, height: 30)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                Image(systemName: "chevron.up").font(.caption.weight(.bold)).foregroundStyle(.secondary)
+            }
+            .frame(height: 44)
+            .padding(.horizontal, 6)
+            .contentShape(Rectangle())
         }
-        .buttonStyle(.bordered)
-        .accessibilityLabel("打码效果：\(style?.label ?? "自动")")
+        .accessibilityLabel("打码效果：\(item.styleOverride?.label ?? "自动")")
+    }
+
+    private func row(_ style: MaskStyle?, _ title: String) -> some View {
+        Label {
+            Text(title)
+        } icon: {
+            Image(uiImage: EffectPreview.swatch(style, colorHex: colorHex, side: 28).withRenderingMode(.alwaysOriginal))
+        }
+        .tag(style)
+    }
+}
+
+/// 工具按钮：再点一次取消（回到"点区域开关"的普通模式）
+struct ToolButton: View {
+    let tool: EditTool
+    let systemImage: String
+    let label: String
+    @Binding var selection: EditTool?
+
+    var body: some View {
+        let selected = selection == tool
+        Button {
+            selection = selected ? nil : tool
+        } label: {
+            // textformat 在中文环境会本地化成"格式"字样，固定用英文字形显示 "Aa"
+            Image(systemName: systemImage)
+                .environment(\.locale, Locale(identifier: "en"))
+                .font(.title3)
+                .frame(width: 44, height: 44)
+                .foregroundStyle(selected ? Color.white : Color.primary)
+                .background(selected ? Color.accentColor : .clear, in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
+/// 右侧圆形按钮：色块颜色（系统取色器的彩色圆环）
+struct FillColorButton: View {
+    @Binding var colorHex: String
+    let isEnabled: Bool
+
+    var body: some View {
+        ColorPicker("色块颜色", selection: Binding(get: { Color(hex: colorHex) }, set: { colorHex = $0.hexString }),
+                    supportsOpacity: false)
+            .labelsHidden()
+            .frame(width: 56, height: 56)
+            .glassCircle()
+            .opacity(isEnabled ? 1 : 0.4)
+            .disabled(!isEnabled)
+            .accessibilityHint(isEnabled ? "" : "选择色块或杂讯色块效果后可用")
     }
 }
 #endif
