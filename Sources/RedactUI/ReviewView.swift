@@ -10,14 +10,21 @@ public struct ReviewView: View {
     @State private var drawing = false
     @State private var dragRect: CGRect?
     @State private var preview: UIImage?
-    @State private var message: String?
-    @State private var showEffects = false
-    @State private var showExport = false
+    @State private var report: SaveReport?
+    /// 同一时间只会有一个弹窗，用一个枚举驱动
+    @State private var sheet: ReviewSheet?
+    /// 每次点框 / 类别 / 画框都加一，驱动轻触反馈
+    @State private var selectionTicks = 0
     private let settings = ExportSettings.shared
     /// 保存完成后的回调（分享扩展用它结束扩展）；为 nil 时弹出结果提示
-    private let onSaved: ((String) -> Void)?
+    private let onSaved: ((SaveReport) -> Void)?
 
-    public init(item: RedactItem, onSaved: ((String) -> Void)? = nil) {
+    enum ReviewSheet: String, Identifiable {
+        case effects, export
+        var id: String { rawValue }
+    }
+
+    public init(item: RedactItem, onSaved: ((SaveReport) -> Void)? = nil) {
         self.item = item
         self.onSaved = onSaved
     }
@@ -40,7 +47,7 @@ public struct ReviewView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button("导出") { showExport = true }
+                Button("导出") { sheet = .export }
                     .buttonStyle(.borderedProminent)
                     .disabled(item.isDetecting)
             }
@@ -52,15 +59,16 @@ public struct ReviewView: View {
             guard showPreview else { return }
             preview = await item.renderPreview()
         }
-        .alert(message ?? "", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
-            Button("好") {}
-        }
-        .sheet(isPresented: $showEffects) {
-            EffectSheet(style: $item.styleOverride, colorHex: $item.fillColorHex)
-        }
-        .sheet(isPresented: $showExport) {
-            ExportSheet(items: [item]) { result in
-                if let onSaved { onSaved(result) } else { message = result }
+        .reportAlert($report)
+        .sensoryFeedback(.selection, trigger: selectionTicks)
+        .sheet(item: $sheet) { sheet in
+            switch sheet {
+            case .effects:
+                EffectSheet(style: $item.styleOverride, colorHex: $item.fillColorHex)
+            case .export:
+                ExportSheet(items: [item]) { result in
+                    if let onSaved { onSaved(result) } else { report = result }
+                }
             }
         }
         // 换了效果就切到效果预览，并记住作为下次的默认
@@ -112,7 +120,7 @@ public struct ReviewView: View {
                         if !showPreview {
                             ForEach(item.findings) { f in
                                 box(f, scale: scale)
-                                    .onTapGesture { update(f.id) { $0.isEnabled.toggle() } }
+                                    .onTapGesture { update(f.id) { $0.isEnabled.toggle() }; selectionTicks += 1 }
                                     .contextMenu { boxMenu(f) }
                             }
                         }
@@ -182,6 +190,7 @@ public struct ReviewView: View {
                 if let r = dragRect, r.width > 6, r.height > 6 {
                     let imageRect = CGRect(x: r.minX / scale, y: r.minY / scale, width: r.width / scale, height: r.height / scale)
                     item.findings.append(Finding(kind: .manual, rect: imageRect, confidence: 1))
+                    selectionTicks += 1
                 }
                 dragRect = nil
             }
@@ -212,7 +221,7 @@ public struct ReviewView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack {
                         ForEach(kinds, id: \.0) { kind, count, on in
-                            Button { setAll(kind, !on) } label: {
+                            Button { setAll(kind, !on); selectionTicks += 1 } label: {
                                 Text("\(kind.label) \(count)")
                                     .font(.footnote.weight(.medium))
                                     .padding(.horizontal, 10).padding(.vertical, 6)
@@ -230,7 +239,7 @@ public struct ReviewView: View {
                     Text("打码效果").tag(true)
                 }
                 .pickerStyle(.segmented)
-                Button { showEffects = true } label: {
+                Button { sheet = .effects } label: {
                     HStack(spacing: 6) {
                         Image(uiImage: EffectPreview.image(item.styleOverride, colorHex: item.fillColorHex))
                             .resizable().frame(width: 32, height: 12).clipShape(RoundedRectangle(cornerRadius: 3))

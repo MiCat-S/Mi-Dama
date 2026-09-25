@@ -28,6 +28,8 @@ struct EffectSheet: View {
             .navigationTitle("打码效果")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
+            .sensoryFeedback(.selection, trigger: style)
+            .sensoryFeedback(.selection, trigger: colorHex)
         }
         .presentationDetents([.medium, .large])
     }

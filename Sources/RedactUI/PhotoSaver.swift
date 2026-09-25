@@ -40,10 +40,10 @@ public enum PhotoSaver {
         }
     }
 
-    /// 逐张导出并保存；全部成功后（可选）一次性删除原图。返回给用户看的结果文案
+    /// 逐张导出并保存；全部成功后（可选）一次性删除原图
     @MainActor
     public static func saveAll(_ items: [RedactItem], deletingOriginals: Bool,
-                               progress: (Int) -> Void = { _ in }) async -> String {
+                               progress: (Int) -> Void = { _ in }) async -> SaveReport {
         var saved = 0
         var originals: [String] = []
         var withoutOriginal = 0
@@ -60,7 +60,9 @@ public enum PhotoSaver {
             }
         } catch {
             Preferences.markProcessed(originals)
-            return saved > 0 ? "已保存 \(saved) 张，之后出错：\(error.localizedDescription)" : error.localizedDescription
+            return saved > 0
+                ? SaveReport(message: "已保存 \(saved) 张，之后出错：\(error.localizedDescription)", outcome: .partial)
+                : SaveReport(message: error.localizedDescription, outcome: .failure)
         }
         Preferences.markProcessed(originals)
         var deletion: Result<DeleteOutcome, Error>?
@@ -71,7 +73,13 @@ public enum PhotoSaver {
         if deletingOriginals, withoutOriginal > 0 {
             text += "（\(withoutOriginal) 张不是从相册打开的，原图未删除）"
         }
-        return text
+        let outcome: SaveReport.Outcome
+        switch deletion {
+        case .failure?: outcome = .partial
+        case .success(.deleted(_, let missing))? where missing > 0: outcome = .partial
+        default: outcome = .success
+        }
+        return SaveReport(message: text, outcome: outcome)
     }
 
     /// 一次性删除多张原图（系统只弹一次确认框），删除的照片会进「最近删除」

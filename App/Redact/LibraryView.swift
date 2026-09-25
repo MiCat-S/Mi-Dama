@@ -41,6 +41,7 @@ struct LibraryView: View {
         }
         .photosPicker(isPresented: $showPicker, selection: $pickerItems, maxSelectionCount: 20,
                       matching: .images, photoLibrary: .shared())
+        .sensoryFeedback(.selection, trigger: selection)
         .onChange(of: pickerItems) { _, picked in Task { await openPicked(picked) } }
         .task {
             if library.status == .notDetermined { await library.requestAccess() }

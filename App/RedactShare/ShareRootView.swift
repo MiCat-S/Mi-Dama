@@ -4,7 +4,7 @@ import SwiftUI
 
 struct ShareRootView: View {
     @Bindable var model: ShareModel
-    @State private var showExport = false
+    @State private var exportRequest: ExportRequest?
 
     var body: some View {
         NavigationStack {
@@ -39,12 +39,12 @@ struct ShareRootView: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
-                        Button("全部导出") { showExport = true }
+                        Button("全部导出") { exportRequest = ExportRequest(items: model.items) }
                             .disabled(model.items.contains { $0.isDetecting })
                     }
                 }
-                .sheet(isPresented: $showExport) {
-                    ExportSheet(items: model.items) { model.handleSaved($0) }
+                .sheet(item: $exportRequest) { request in
+                    ExportSheet(items: request.items) { model.handleSaved($0) }
                 }
             }
         }

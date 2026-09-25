@@ -55,8 +55,8 @@ final class ShareModel {
     }
 
     /// 导出面板保存完：全部成功就结束扩展，否则显示原因
-    func handleSaved(_ result: String) {
-        if items.allSatisfy({ $0.phase == .saved }) { finish() } else { message = result }
+    func handleSaved(_ report: SaveReport) {
+        if report.outcome == .success, items.allSatisfy({ $0.phase == .saved }) { finish() } else { message = report.message }
     }
 
     func finish() {

@@ -33,8 +33,8 @@ struct BatchReviewView: View {
     let store: ItemStore
     @State private var current: String
     /// 用 sheet(item:) 把要导出的图片随弹出一起传进去（isPresented 版本会拿到旧的空列表）
-    @State private var exportBatch: ExportBatch?
-    @State private var message: String?
+    @State private var exportRequest: ExportRequest?
+    @State private var report: SaveReport?
 
     init(keys: [String], store: ItemStore) {
         self.keys = keys
@@ -56,12 +56,11 @@ struct BatchReviewView: View {
                     }
                 }
             }
-            .sheet(item: $exportBatch) { batch in
-                ExportSheet(items: batch.items) { message = $0 }
+            .sheet(item: $exportRequest) { request in
+                ExportSheet(items: request.items) { report = $0 }
             }
-            .alert(message ?? "", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
-                Button("好") {}
-            }
+            .reportAlert($report)
+            .sensoryFeedback(.selection, trigger: current)
     }
 
     private var strip: some View {
@@ -84,7 +83,7 @@ struct BatchReviewView: View {
                 Task {
                     var items: [RedactItem] = []
                     for key in keys { if let item = await store.item(for: key) { items.append(item) } }
-                    exportBatch = ExportBatch(items: items)
+                    exportRequest = ExportRequest(items: items)
                 }
             }
             .buttonStyle(.bordered)
@@ -92,11 +91,6 @@ struct BatchReviewView: View {
         }
         .background(.bar)
     }
-}
-
-private struct ExportBatch: Identifiable {
-    let id = UUID()
-    let items: [RedactItem]
 }
 
 private struct BatchThumb: View {

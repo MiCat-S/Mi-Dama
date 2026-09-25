@@ -6,14 +6,14 @@ import SwiftUI
 
 public struct ExportSheet: View {
     let items: [RedactItem]
-    /// 保存完成后回调结果文案（分享扩展用它直接结束扩展）
-    let onSaved: (String) -> Void
+    /// 保存由面板自己完成并关闭；结果交给弹出方显示（分享扩展据此直接结束扩展）
+    let onSaved: (SaveReport) -> Void
     @Bindable private var settings = ExportSettings.shared
     @State private var preview: UIImage?
     @State private var saved: Int?
     @Environment(\.dismiss) private var dismiss
 
-    public init(items: [RedactItem], onSaved: @escaping (String) -> Void) {
+    public init(items: [RedactItem], onSaved: @escaping (SaveReport) -> Void) {
         self.items = items
         self.onSaved = onSaved
     }
@@ -145,12 +145,12 @@ public struct ExportSheet: View {
 
     private func save() async {
         saved = 0
-        let message = await PhotoSaver.saveAll(items, deletingOriginals: settings.deleteOriginal && canDeleteOriginals) { n in
+        let report = await PhotoSaver.saveAll(items, deletingOriginals: settings.deleteOriginal && canDeleteOriginals) { n in
             saved = n
         }
         saved = nil
         dismiss()
-        onSaved(message)
+        onSaved(report)
     }
 
     private func slider(_ title: String, value: Binding<CGFloat>, in range: ClosedRange<CGFloat>,
