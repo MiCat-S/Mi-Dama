@@ -36,6 +36,14 @@ public enum ExportSize: Codable, Hashable, Sendable {
     /// 长边不超过该像素值（不会放大）
     case maxSide(CGFloat)
 
+    /// 再加一个长边上限（预览用：不需要比屏幕显示更大的图）
+    public func capped(at side: CGFloat) -> ExportSize {
+        switch self {
+        case .original: .maxSide(side)
+        case .maxSide(let s): .maxSide(min(s, side))
+        }
+    }
+
     public func apply(to image: CIImage) -> CIImage {
         let img = image.transformed(by: CGAffineTransform(translationX: -image.extent.minX, y: -image.extent.minY))
         guard case .maxSide(let side) = self else { return img }

@@ -25,9 +25,9 @@ struct RedactImagesIntent: AppIntent {
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<[IntentFile]> {
         var outputs: [IntentFile] = []
-        for (index, file) in images.enumerated() {
-            // 快捷指令里不显示图片，显示用图缩到最小
-            guard let item = RedactItem(data: file.data, maxDisplaySide: 64) else {
+        for file in images {
+            // 快捷指令里不显示图片，只用来识别和导出
+            guard let item = RedactItem(data: file.data, originalFilename: file.filename) else {
                 throw RedactIntentError.unreadableImage(file.filename)
             }
             await item.detect()
@@ -35,9 +35,7 @@ struct RedactImagesIntent: AppIntent {
             if let chosen = style.maskStyle(fallback: item.styleOverride) { item.styleOverride = chosen } else { item.styleOverride = nil }
             let export = item.export
             let data = try await Task.detached(priority: .userInitiated) { try export.data() }.value
-            let base = (file.filename as NSString).deletingPathExtension
-            let name = "\(base.isEmpty ? "image-\(index + 1)" : base)-redacted.\(export.format.fileExtension)"
-            outputs.append(IntentFile(data: data, filename: name, type: export.format.utType))
+            outputs.append(IntentFile(data: data, filename: export.outputFilename, type: export.format.utType))
         }
         return .result(value: outputs)
     }

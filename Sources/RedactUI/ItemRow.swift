@@ -12,13 +12,19 @@ public struct ItemRow: View {
 
     public var body: some View {
         HStack(spacing: 12) {
-            Image(uiImage: item.displayImage)
-                .resizable()
-                .scaledToFill()
-                .frame(width: 48, height: 64)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+            Group {
+                if let thumbnail = item.thumbnail {
+                    Image(uiImage: thumbnail).resizable().scaledToFill()
+                } else {
+                    Color.secondary.opacity(0.15)
+                }
+            }
+            .frame(width: 48, height: 64)
+            .clipShape(RoundedRectangle(cornerRadius: 6))
             VStack(alignment: .leading, spacing: 4) {
                 switch item.phase {
+                case .pending:
+                    Label("等待识别", systemImage: "clock")
                 case .detecting:
                     Label("识别中…", systemImage: "hourglass")
                 case .ready:
@@ -26,13 +32,12 @@ public struct ItemRow: View {
                     Text(summary).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 case .saved:
                     Label("已保存", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
-                case .cancelled:
-                    Label("已取消", systemImage: "xmark.circle").foregroundStyle(.secondary)
                 case .failed(let reason):
                     Label(reason, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
                 }
             }
         }
+        .task { await item.loadThumbnail() }
     }
 
     private var summary: String {

@@ -42,6 +42,7 @@
 		AA0000000000000000000010 /* Redact.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Redact.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000110 /* RedactShare.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RedactShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000113 /* RedactShareInfo.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = RedactShareInfo.plist; sourceTree = "<group>"; };
+		AA0000000000000000000114 /* RedactInfo.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = RedactInfo.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -84,6 +85,7 @@
 			children = (
 				AA0000000000000000000020 /* Redact */,
 				AA0000000000000000000111 /* RedactShare */,
+				AA0000000000000000000114 /* RedactInfo.plist */,
 				AA0000000000000000000113 /* RedactShareInfo.plist */,
 				AA0000000000000000000041 /* Products */,
 			);
@@ -280,7 +282,8 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "截图打码";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "把打码后的图片保存到相册（只添加，不读取你的照片）";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "仅在你开启「保存后删除原图」时使用：删除刚打码的那张原图。";
+				INFOPLIST_FILE = RedactInfo.plist;
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "打开 App 时直接进入最新的截图，并在相册里挑选要打码的图片；开启「保存后删除原图」时用于删除原图。图片只在本机处理，不会上传。";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
@@ -305,7 +308,8 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "截图打码";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "把打码后的图片保存到相册（只添加，不读取你的照片）";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "仅在你开启「保存后删除原图」时使用：删除刚打码的那张原图。";
+				INFOPLIST_FILE = RedactInfo.plist;
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "打开 App 时直接进入最新的截图，并在相册里挑选要打码的图片；开启「保存后删除原图」时用于删除原图。图片只在本机处理，不会上传。";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;

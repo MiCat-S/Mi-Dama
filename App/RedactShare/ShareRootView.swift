@@ -1,9 +1,10 @@
-// 分享扩展界面：单张直接进审核页（保存即结束），多张先列表再逐张审核或一键全部保存
+// 分享扩展界面：单张直接进审核页（保存即结束），多张先列表再逐张审核，或一次全部导出
 import RedactUI
 import SwiftUI
 
 struct ShareRootView: View {
     @Bindable var model: ShareModel
+    @State private var showExport = false
 
     var body: some View {
         NavigationStack {
@@ -29,7 +30,7 @@ struct ShareRootView: View {
                                    description: Text("请从「照片」或截图预览里分享图片。"))
         case .ready:
             if model.items.count == 1, let item = model.items.first {
-                ReviewView(item: item, onSaved: { model.finish() })
+                ReviewView(item: item, onSaved: { model.handleSaved($0) })
             } else {
                 List(model.items) { item in
                     NavigationLink { ReviewView(item: item) } label: { ItemRow(item: item) }
@@ -38,9 +39,12 @@ struct ShareRootView: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
-                        Button("全部保存") { Task { await model.saveAll() } }
-                            .disabled(!model.items.contains { $0.phase == .ready })
+                        Button("全部导出") { showExport = true }
+                            .disabled(model.items.contains { $0.isDetecting })
                     }
+                }
+                .sheet(isPresented: $showExport) {
+                    ExportSheet(items: model.items) { model.handleSaved($0) }
                 }
             }
         }

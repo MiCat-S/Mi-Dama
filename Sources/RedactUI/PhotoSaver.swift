@@ -29,12 +29,49 @@ public enum PhotoSaver {
         case cancelled
     }
 
-    public static func save(_ data: Data) async throws {
+    /// - Parameter filename: 相册里记录的原文件名（带 "-redacted." 标记，用来认出本 App 的输出）
+    public static func save(_ data: Data, filename: String) async throws {
         let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
         guard status == .authorized || status == .limited else { throw SaveError.denied }
         try await PHPhotoLibrary.shared().performChanges {
-            PHAssetCreationRequest.forAsset().addResource(with: .photo, data: data, options: nil)
+            let options = PHAssetResourceCreationOptions()
+            options.originalFilename = filename
+            PHAssetCreationRequest.forAsset().addResource(with: .photo, data: data, options: options)
         }
+    }
+
+    /// 逐张导出并保存；全部成功后（可选）一次性删除原图。返回给用户看的结果文案
+    @MainActor
+    public static func saveAll(_ items: [RedactItem], deletingOriginals: Bool,
+                               progress: (Int) -> Void = { _ in }) async -> String {
+        var saved = 0
+        var originals: [String] = []
+        var withoutOriginal = 0
+        do {
+            for item in items {
+                await item.detectIfNeeded()
+                let export = item.export
+                let data = try await Task.detached(priority: .userInitiated) { try export.data() }.value
+                try await save(data, filename: export.outputFilename)
+                item.phase = .saved
+                saved += 1
+                progress(saved)
+                if let id = item.assetIdentifier { originals.append(id) } else { withoutOriginal += 1 }
+            }
+        } catch {
+            Preferences.markProcessed(originals)
+            return saved > 0 ? "已保存 \(saved) 张，之后出错：\(error.localizedDescription)" : error.localizedDescription
+        }
+        Preferences.markProcessed(originals)
+        var deletion: Result<DeleteOutcome, Error>?
+        if deletingOriginals, !originals.isEmpty {
+            do { deletion = .success(try await deleteOriginals(originals)) } catch { deletion = .failure(error) }
+        }
+        var text = summary(saved: saved, deletion: deletion)
+        if deletingOriginals, withoutOriginal > 0 {
+            text += "（\(withoutOriginal) 张不是从相册打开的，原图未删除）"
+        }
+        return text
     }
 
     /// 一次性删除多张原图（系统只弹一次确认框），删除的照片会进「最近删除」

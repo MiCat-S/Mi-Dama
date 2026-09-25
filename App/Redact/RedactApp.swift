@@ -4,7 +4,7 @@ import SwiftUI
 struct RedactApp: App {
     var body: some Scene {
         WindowGroup {
-            HomeView()
+            LibraryView()
         }
     }
 }

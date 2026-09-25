@@ -1,4 +1,5 @@
-// 审核页：看识别框、点框取消 / 恢复、长按框单独换效果、按类别整组开关、手动补框、选打码效果、导出选项、保存或分享
+// 审核页：进入即开始识别。看识别框、点框取消 / 恢复、长按框单独换效果、按类别整组开关、手动补框、选打码效果，
+// 右上角「导出」在一个面板里选格式 / 大小 / 水印 / 是否删原图，再保存或分享
 #if canImport(UIKit)
 import RedactKit
 import SwiftUI
@@ -11,12 +12,12 @@ public struct ReviewView: View {
     @State private var preview: UIImage?
     @State private var message: String?
     @State private var showEffects = false
-    @State private var showExportOptions = false
+    @State private var showExport = false
     private let settings = ExportSettings.shared
-    /// 保存成功后的回调（分享扩展用它结束扩展）；为 nil 时弹出提示
-    private let onSaved: (() -> Void)?
+    /// 保存完成后的回调（分享扩展用它结束扩展）；为 nil 时弹出结果提示
+    private let onSaved: ((String) -> Void)?
 
-    public init(item: RedactItem, onSaved: (() -> Void)? = nil) {
+    public init(item: RedactItem, onSaved: ((String) -> Void)? = nil) {
         self.item = item
         self.onSaved = onSaved
     }
@@ -27,7 +28,7 @@ public struct ReviewView: View {
                 canvas
             }
             .overlay {
-                if item.phase == .detecting {
+                if item.isDetecting && item.displayImage != nil {
                     ProgressView("识别中…")
                         .padding()
                         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
@@ -38,13 +39,15 @@ public struct ReviewView: View {
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItemGroup(placement: .topBarTrailing) {
-                Button { showExportOptions = true } label: { Image(systemName: "ellipsis.circle") }
-                    .accessibilityLabel("导出选项")
-                ShareLink(item: item.export, preview: SharePreview("打码后的图片", image: Image(uiImage: preview ?? item.displayImage)))
-                Button("保存") { Task { await save() } }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("导出") { showExport = true }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(item.isDetecting)
             }
         }
+        .task { await item.loadDisplayImage() }
+        .task { await item.detectIfNeeded() }
+        .onDisappear { item.releaseDisplayImage() }
         .task(id: renderKey) {
             guard showPreview else { return }
             preview = await item.renderPreview()
@@ -55,11 +58,11 @@ public struct ReviewView: View {
         .sheet(isPresented: $showEffects) {
             EffectSheet(style: $item.styleOverride, colorHex: $item.fillColorHex)
         }
-        .sheet(isPresented: $showExportOptions) {
-            ExportOptionsSheet(settings: settings, item: item)
+        .sheet(isPresented: $showExport) {
+            ExportSheet(items: [item]) { result in
+                if let onSaved { onSaved(result) } else { message = result }
+            }
         }
-        // 水印变了也切到效果预览，才看得到
-        .onChange(of: watermarkKey) { showPreview = true }
         // 换了效果就切到效果预览，并记住作为下次的默认
         .onChange(of: item.styleOverride) { _, new in
             Preferences.style = new
@@ -79,8 +82,8 @@ public struct ReviewView: View {
 
     private var title: String {
         switch item.phase {
-        case .detecting: "识别中…"
-        case .cancelled: "未识别"
+        case .pending, .detecting: "识别中…"
+        case .failed: "识别失败"
         default: item.findings.isEmpty ? "未发现敏感信息" : "已勾选 \(item.enabledCount) / \(item.findings.count)"
         }
     }
@@ -89,8 +92,17 @@ public struct ReviewView: View {
 
     // MARK: - 图片与识别框
 
+    @ViewBuilder
     private var canvas: some View {
-        Image(uiImage: showPreview ? (preview ?? item.displayImage) : item.displayImage)
+        if let display = item.displayImage {
+            image(showPreview ? (preview ?? display) : display)
+        } else {
+            ProgressView("正在读取图片…").frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private func image(_ uiImage: UIImage) -> some View {
+        Image(uiImage: uiImage)
             .resizable()
             .scaledToFit()
             .overlay {
@@ -243,31 +255,5 @@ public struct ReviewView: View {
         }
     }
 
-    private func save() async {
-        do {
-            let export = item.export
-            let data = try await Task.detached { try export.data() }.value
-            try await PhotoSaver.save(data)
-            item.phase = .saved
-        } catch {
-            message = error.localizedDescription
-            return
-        }
-        if let onSaved {
-            onSaved()
-            return
-        }
-        // 只有保存成功后才删原图
-        var deletion: Result<PhotoSaver.DeleteOutcome, Error>?
-        if settings.deleteOriginal {
-            if let id = item.assetIdentifier {
-                do { deletion = .success(try await PhotoSaver.deleteOriginals([id])) } catch { deletion = .failure(error) }
-            } else {
-                message = "已保存到相册（这张图不是从相册选的，无法删除原图）"
-                return
-            }
-        }
-        message = PhotoSaver.summary(saved: 1, deletion: deletion)
-    }
 }
 #endif

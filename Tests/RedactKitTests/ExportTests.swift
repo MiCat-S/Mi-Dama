@@ -57,6 +57,8 @@ struct ExportTests {
         #expect(ExportSize.maxSide(200).apply(to: src).extent.size == CGSize(width: 200, height: 150))
         #expect(ExportSize.maxSide(1000).apply(to: src).extent.size == CGSize(width: 400, height: 300))
         #expect(ExportSize.original.apply(to: src).extent.size == CGSize(width: 400, height: 300))
+        #expect(ExportSize.original.capped(at: 100) == .maxSide(100))
+        #expect(ExportSize.maxSide(80).capped(at: 100) == .maxSide(80))
         // 缩小后边缘不应混入透明 / 黑边
         let px = RGBAImage(ExportSize.maxSide(200).apply(to: src), context: context)
         #expect(px.rgb(0, 0).x > 250 && px.rgb(199, 149).x > 250)

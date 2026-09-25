@@ -45,29 +45,18 @@ final class ShareModel {
             .prefix(Self.maxItems)
         for provider in providers {
             if let data = await Self.loadImageData(provider),
-               let item = RedactItem(data: data, maxDisplaySide: Self.maxDisplaySide) {
+               let item = RedactItem(data: data, originalFilename: provider.suggestedName, maxDisplaySide: Self.maxDisplaySide) {
                 items.append(item)
             }
         }
         state = items.isEmpty ? .empty : .ready
         // 串行识别，一次只有一张图的识别中间数据在内存里
-        for item in items { await item.detect() }
+        for item in items { await item.detectIfNeeded() }
     }
 
-    func saveAll() async {
-        var saved = 0
-        do {
-            for item in items where item.phase == .ready {
-                let export = item.export
-                let data = try await Task.detached { try export.data() }.value
-                try await PhotoSaver.save(data)
-                item.phase = .saved
-                saved += 1
-            }
-            finish()
-        } catch {
-            message = saved > 0 ? "已保存 \(saved) 张，之后出错：\(error.localizedDescription)" : error.localizedDescription
-        }
+    /// 导出面板保存完：全部成功就结束扩展，否则显示原因
+    func handleSaved(_ result: String) {
+        if items.allSatisfy({ $0.phase == .saved }) { finish() } else { message = result }
     }
 
     func finish() {
