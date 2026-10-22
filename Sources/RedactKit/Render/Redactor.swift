@@ -12,7 +12,7 @@ public struct Redactor {
     public var fillColor = CIColor(red: 0.08, green: 0.08, blue: 0.09)
     let context: CIContext
 
-    public init(context: CIContext = CIContext(options: [.cacheIntermediates: false])) {
+    public init(context: CIContext = RenderContext.shared) {
         self.context = context
     }
 
@@ -25,15 +25,13 @@ public struct Redactor {
         let enabled = findings.filter(\.isEnabled)
         guard !enabled.isEmpty else { return image }
         let chosen = { (f: Finding) in f.style ?? style ?? .default(for: f.kind) }
-        // "抹除文字"需要采样背景色，只在用得到时才读一次像素
-        let pixels = enabled.contains { chosen($0) == .hideText } ? RGBAImage(image, context: context) : nil
 
         var result = image
         for f in enabled {
             let rect = padded(f).intersection(CGRect(origin: .zero, size: extent.size))
             guard !rect.isEmpty else { continue }
             let ciRect = rect.flippedVertically(inHeight: extent.height).integral
-            let patch = makePatch(chosen(f), kind: f.kind, rect: rect, ciRect: ciRect, base: result, pixels: pixels)
+            let patch = makePatch(chosen(f), kind: f.kind, rect: rect, ciRect: ciRect, base: result, source: image)
             result = patch.cropped(to: ciRect).composited(over: result)
         }
         return result.cropped(to: extent)
@@ -53,14 +51,14 @@ public struct Redactor {
     }
 
     private func makePatch(_ style: MaskStyle, kind: FindingKind, rect: CGRect, ciRect: CGRect,
-                           base: CIImage, pixels: RGBAImage?) -> CIImage {
+                           base: CIImage, source: CIImage) -> CIImage {
         let short = min(rect.width, rect.height)
         switch style {
         case .solid:
             return CIImage(color: fillColor)
         case .hideText:
-            // 背景足够纯：用背景色抹掉，看起来像原本没写字
-            if let stats = pixels?.ringStats(around: rect), stats.agreement >= 0.7 {
+            // 背景足够纯：用背景色抹掉，看起来像原本没写字（从原图采样，不受之前打的码影响）
+            if let stats = RGBAImage.ringStats(of: source, around: rect, context: context), stats.agreement >= 0.7 {
                 let c = stats.median / 255
                 return CIImage(color: CIColor(red: CGFloat(c.x), green: CGFloat(c.y), blue: CGFloat(c.z)))
             }

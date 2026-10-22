@@ -37,6 +37,26 @@ private func rowStd(_ img: RGBAImage, y: Int, x0: Int, x1: Int) -> Float {
 struct RedactorTests {
     let context = CIContext()
 
+    @Test func 抹除文字只渲染局部也采到同样的背景() {
+        // 左右两种底色 + 顶部条纹：不同位置的框外一圈颜色各不相同
+        let src = makeImage(width: 300, height: 120) { ctx in
+            ctx.setFillColor(CGColor(red: 0.2, green: 0.5, blue: 0.8, alpha: 1))
+            ctx.fill(CGRect(x: 0, y: 0, width: 150, height: 120))
+            stripes(ctx, in: CGRect(x: 0, y: 0, width: 300, height: 12))
+        }
+        let full = RGBAImage(src, context: context)
+        // 普通位置、小数坐标、贴着四边、跨出图外
+        let rects = [CGRect(x: 40, y: 30, width: 100, height: 20), CGRect(x: 140.6, y: 50.2, width: 30.5, height: 9.3),
+                     CGRect(x: 0, y: 0, width: 50, height: 14), CGRect(x: 280, y: 100, width: 20, height: 20),
+                     CGRect(x: -5, y: 60, width: 30, height: 30), CGRect(x: 1, y: 1, width: 298, height: 118)]
+        for rect in rects {
+            let expected = full.ringStats(around: rect)
+            let actual = RGBAImage.ringStats(of: src, around: rect, context: context)
+            #expect(actual?.median == expected?.median, "\(rect)")
+            #expect(actual?.agreement == expected?.agreement, "\(rect)")
+        }
+    }
+
     @Test func 像素缓冲第0行是图像顶部() {
         let img = makeImage(width: 10, height: 10) { ctx in
             ctx.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))

@@ -65,10 +65,10 @@ struct PhotoGrid: View {
             let side = (geo.size.width - 4) / 3
             ScrollView {
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 2), count: 3), spacing: 2) {
-                    ForEach(library.assets, id: \.localIdentifier) { asset in
-                        AssetCell(asset: asset, library: library, side: side,
-                                  selectionIndex: selection.firstIndex(of: asset.localIdentifier))
-                            .onTapGesture { onTap(asset) }
+                    ForEach(library.assets) { entry in
+                        AssetCell(asset: entry.asset, index: entry.index, library: library, side: side,
+                                  selectionIndex: selection.firstIndex(of: entry.id))
+                            .onTapGesture { onTap(entry.asset) }
                     }
                 }
             }
@@ -103,6 +103,8 @@ struct EmptyLibraryView: View {
 /// 网格里的一格：缩略图 + 多选序号 + "已打码"标记（本 App 导出的图）
 struct AssetCell: View {
     let asset: PHAsset
+    /// 在列表里的位置（预取前后的缩略图）
+    let index: Int
     let library: PhotoLibrary
     let side: CGFloat
     let selectionIndex: Int?
@@ -139,8 +141,12 @@ struct AssetCell: View {
             .accessibilityLabel(accessibilityText)
             .accessibilityAddTraits(selectionIndex != nil ? [.isButton, .isSelected] : .isButton)
             .task(id: asset.localIdentifier) {
+                guard !Task.isCancelled else { return }
+                library.prefetchThumbnails(around: index, side: side * scale)
                 image = await library.thumbnail(for: asset, side: side * scale)
-                isOutput = PhotoLibrary.isRedactedOutput(asset)
+                // 已经滑出屏幕：不用再查
+                guard !Task.isCancelled else { return }
+                isOutput = await library.isOutput(asset)
             }
     }
 

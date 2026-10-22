@@ -2,6 +2,7 @@
 // 创建很便宜（不解码）；显示用图、缩略图、识别都在需要时于后台完成
 #if canImport(UIKit)
 import CoreImage
+import ImageIO
 import Observation
 import RedactKit
 import SwiftUI
@@ -17,7 +18,10 @@ public final class RedactItem: Identifiable {
     }
 
     public let id = UUID()
-    public let source: CIImage
+    /// 已按方向校正的原图。审核页显示期间带着解码缓存，离开后换成没解码过的（见 renderSource）
+    @ObservationIgnored public private(set) var source: CIImage
+    /// 原图文件数据（缩略图、显示用图直接从它按目标尺寸解码）
+    @ObservationIgnored private let data: Data
     /// 截图（"自动"格式下导出无损 PNG）还是相机照片（导出 HEIC）
     public let isScreenshot: Bool
     /// 原图自带的元数据（{TIFF} {Exif} {GPS} 等），仅用于"查看 EXIF"，导出时一律丢弃
@@ -45,18 +49,33 @@ public final class RedactItem: Identifiable {
     @ObservationIgnored private var detectTask: Task<Void, Never>?
     private var history = EditHistory<EditState>()
     @ObservationIgnored private var displayTask: Task<Void, Never>?
-
-    /// CIContext 线程安全，后台渲染共用一个
-    private nonisolated static let renderContext = CIContext(options: [.cacheIntermediates: false])
+    /// 正在显示这张图的审核页数量（loadDisplayImage / releaseDisplayImage 成对调用），归零时释放显示用图
+    @ObservationIgnored private var displayUsers = 0
+    /// 正在跑的预览渲染，以及排在它后面的下一次
+    @ObservationIgnored private var previewTask: Task<UIImage?, Never>?
+    @ObservationIgnored private var queuedPreview: Task<UIImage?, Never>?
 
     public init?(data: Data, assetIdentifier: String? = nil, originalFilename: String? = nil, maxDisplaySide: CGFloat = 3072) {
         guard let raw = CIImage(data: data, options: [.applyOrientationProperty: true]) else { return nil }
+        self.data = data
         source = raw.transformed(by: CGAffineTransform(translationX: -raw.extent.minX, y: -raw.extent.minY))
         isScreenshot = ImageKind.isLikelyScreenshot(data: data, properties: raw.properties)
         metadata = raw.properties
         self.assetIdentifier = assetIdentifier
         self.originalFilename = originalFilename
         self.maxDisplaySide = maxDisplaySide
+    }
+
+    private nonisolated static func makeSource(_ data: Data) -> CIImage? {
+        guard let raw = CIImage(data: data, options: [.applyOrientationProperty: true]) else { return nil }
+        return raw.transformed(by: CGAffineTransform(translationX: -raw.extent.minX, y: -raw.extent.minY))
+    }
+
+    /// 识别、预览、导出用的原图。CIImage(data:) 第一次渲染时，ImageIO 会把整张图解码后缓存在这个 CIImage 里
+    /// （长截图约 80 MB），它活多久就占多久。审核页显示期间共用 source 这一份：没有这份缓存，长截图每次渲染都要
+    /// 重新解码好几秒。不在显示时每次用一个新的，用完就释放，解码缓存不会跟着 ItemStore 里的缓存一直留着
+    private var renderSource: CIImage {
+        displayUsers > 0 ? source : Self.makeSource(data) ?? source
     }
 
     public var size: CGSize { source.extent.size }
@@ -164,15 +183,19 @@ public final class RedactItem: Identifiable {
 
     public func loadThumbnail() async {
         guard thumbnail == nil else { return }
-        thumbnail = await Self.render(source, maxSide: 256)
+        thumbnail = await Self.decode(data, maxSide: 256)
     }
 
+    /// 进入审核页时调用，与 releaseDisplayImage 成对
     public func loadDisplayImage() async {
+        displayUsers += 1
         if displayImage != nil { return }
         if let displayTask { return await displayTask.value }
-        let task = Task { [source, maxDisplaySide] in
-            self.displayImage = await Self.render(source, maxSide: maxDisplaySide)
-            if self.thumbnail == nil { self.thumbnail = await Self.render(source, maxSide: 256) }
+        let task = Task { [data, maxDisplaySide] in
+            let image = await Self.decode(data, maxSide: maxDisplaySide)
+            // 解码期间审核页已经关掉：不留住这张大图（否则它会一直跟着 ItemStore 里的缓存）
+            if self.displayUsers > 0 { self.displayImage = image }
+            if self.thumbnail == nil { self.thumbnail = await Self.decode(data, maxSide: 256) }
         }
         displayTask = task
         await task.value
@@ -181,13 +204,30 @@ public final class RedactItem: Identifiable {
 
     /// 离开审核页时调用：大图只在看的时候占内存
     public func releaseDisplayImage() {
+        displayUsers -= 1
+        guard displayUsers <= 0 else { return }
         displayImage = nil
+        // 连同原图的解码缓存一起丢掉（见 renderSource）；还在跑的识别、渲染拿着旧的那份，用完自然释放
+        source = Self.makeSource(data) ?? source
     }
 
-    private nonisolated static func render(_ image: CIImage, maxSide: CGFloat) async -> UIImage? {
+    /// 按目标尺寸解码：ImageIO 对 JPEG / HEIC 可以边解码边缩小，比完整解码后再缩放快、省内存；
+    /// WithTransform 按 EXIF 方向转正，和 source 一致。ImageIO 读不了的格式退回 Core Image
+    private nonisolated static func decode(_ data: Data, maxSide: CGFloat) async -> UIImage? {
         await Task.detached(priority: .userInitiated) {
+            let options: [CFString: Any] = [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceThumbnailMaxPixelSize: Int(maxSide),
+                kCGImageSourceShouldCacheImmediately: true,
+            ]
+            if let src = CGImageSourceCreateWithData(data as CFData, nil),
+               let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, options as CFDictionary) {
+                return UIImage(cgImage: cg)
+            }
+            guard let image = Self.makeSource(data) else { return nil }
             let scaled = ExportSize.maxSide(maxSide).apply(to: image)
-            return renderContext.createCGImage(scaled, from: scaled.extent).map(UIImage.init(cgImage:))
+            return RenderContext.shared.createCGImage(scaled, from: scaled.extent).map(UIImage.init(cgImage:))
         }.value
     }
 
@@ -211,7 +251,7 @@ public final class RedactItem: Identifiable {
 
     private func runDetection() async {
         phase = .detecting
-        let source = self.source
+        let source = renderSource
         do {
             let result = try await Task.detached(priority: .userInitiated) {
                 try DetectionPipeline().analyze(source)
@@ -232,7 +272,7 @@ public final class RedactItem: Identifiable {
     /// 当前勾选、样式和导出选项对应的导出任务（可跨线程传递）
     public var export: RedactedExport {
         let settings = ExportSettings.shared
-        return RedactedExport(source: source, findings: findings, style: styleOverride, color: .fromHex(fillColorHex),
+        return RedactedExport(source: renderSource, findings: findings, style: styleOverride, color: .fromHex(fillColorHex),
                               watermark: settings.activeWatermark, size: settings.size.exportSize,
                               format: settings.exportFormat(isScreenshot: isScreenshot),
                               filename: outputBaseName)
@@ -243,11 +283,28 @@ public final class RedactItem: Identifiable {
         return base.isEmpty ? "redact-\(id.uuidString.prefix(8))" : base
     }
 
-    /// 打码预览（后台渲染，尺寸不超过显示用图）
+    /// 打码预览（后台渲染，尺寸不超过显示用图）。同一时间只渲染一张：渲染中又有修改就排一次，
+    /// 排队的那次开始时才读取状态，期间再来的请求都共用它 —— 连点、拖取色器时不会堆起一串全尺寸渲染
     public func renderPreview() async -> UIImage? {
+        if let queuedPreview { return await queuedPreview.value }
+        guard let running = previewTask else { return await startPreview() }
+        let next = Task<UIImage?, Never> {
+            _ = await running.value
+            self.queuedPreview = nil
+            return await self.startPreview()
+        }
+        queuedPreview = next
+        return await next.value
+    }
+
+    private func startPreview() async -> UIImage? {
         let full = self.export
         let export = full.sized(full.size.capped(at: maxDisplaySide))
-        return await Task.detached(priority: .userInitiated) { export.render().map(UIImage.init(cgImage:)) }.value
+        let task = Task.detached(priority: .userInitiated) { export.render().map(UIImage.init(cgImage:)) }
+        previewTask = task
+        let image = await task.value
+        if previewTask == task { previewTask = nil }
+        return image
     }
 }
 
@@ -266,7 +323,7 @@ public struct RedactedExport: Transferable, @unchecked Sendable {
     public let format: ExportFormat
     let filename: String
 
-    private static let context = CIContext(options: [.cacheIntermediates: false])
+    private static let context = RenderContext.shared
 
     public var outputFilename: String { "\(filename)\(Self.filenameMarker)\(format.fileExtension)" }
 
@@ -275,13 +332,13 @@ public struct RedactedExport: Transferable, @unchecked Sendable {
                        size: size, format: format, filename: filename)
     }
 
-    /// 顺序固定：先打码，再加水印，最后缩放（缩小永远不会发生在打码之前）
+    /// 顺序固定：先打码，再缩放（缩小永远不会发生在打码之前），最后在输出尺寸上加水印。
+    /// 水印字号、间距都按图片宽度换算，画在输出尺寸上效果一样，还不用按原图尺寸开一整块位图
     public func render() -> CGImage? {
         var redactor = Redactor(context: Self.context)
         redactor.fillColor = color
-        var image = redactor.render(source, findings: findings, style: style)
+        var image = size.apply(to: redactor.render(source, findings: findings, style: style))
         if let watermark { image = Watermark.overlay(image, spec: watermark) }
-        image = size.apply(to: image)
         return redactor.makeCGImage(image)
     }
 

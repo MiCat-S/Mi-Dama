@@ -15,7 +15,7 @@ public struct DetectionResult: Sendable {
 public struct DetectionPipeline {
     let context: CIContext
 
-    public init(context: CIContext = CIContext(options: [.cacheIntermediates: false])) {
+    public init(context: CIContext = RenderContext.shared) {
         self.context = context
     }
 

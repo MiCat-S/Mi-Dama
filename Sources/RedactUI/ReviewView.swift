@@ -72,7 +72,10 @@ public struct ReviewView: View {
         // 所见即所得：勾选、效果、颜色、水印变化后重新渲染；渲染期间保留上一张，不闪烁
         .task(id: renderKey) {
             guard !item.isDetecting, item.displayImage != nil else { return }
-            rendered = await item.renderPreview()
+            let image = await item.renderPreview()
+            // 渲染期间又改了：这张已经过时，交给最新那次，不能用它盖掉新结果
+            guard !Task.isCancelled else { return }
+            rendered = image
         }
         .onChange(of: colorHex) { _, new in
             item.fillColorHex = new

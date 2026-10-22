@@ -107,7 +107,9 @@ public struct ExportSheet: View {
             guard let first else { return }
             try? await Task.sleep(for: .milliseconds(150))   // 拖动滑杆时不要每一帧都重渲染
             guard !Task.isCancelled else { return }
-            preview = await first.renderPreview()
+            let image = await first.renderPreview()
+            guard !Task.isCancelled else { return }
+            preview = image
         }
     }
 

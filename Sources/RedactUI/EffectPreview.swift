@@ -9,6 +9,7 @@ enum EffectPreview {
     private static let size = CGSize(width: 240, height: 60)
     private static let font = UIFont.monospacedDigitSystemFont(ofSize: 22, weight: .semibold)
     private static let label = "手机" as NSString, number = "138 0013 8000" as NSString
+    /// 小样在主线程同步渲染，单独用一个上下文：不和后台的全尺寸预览排同一条 GPU 队列，免得主线程等它
     private static let context = CIContext(options: [.cacheIntermediates: false])
 
     /// 号码所在的矩形（左上原点）

@@ -46,21 +46,21 @@ struct LibraryView: View {
         .task {
             if library.status == .notDetermined { await library.requestAccess() }
             launched = true
-            if openLatestOnLaunch { openLatest(onlyIfNew: false) }
+            if openLatestOnLaunch { await openLatest(onlyIfNew: false) }
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active, launched else { return }
             library.refreshStatus()
-            if openLatestOnLaunch { openLatest(onlyIfNew: true) }
+            if openLatestOnLaunch { Task { await openLatest(onlyIfNew: true) } }
         }
     }
 
     // MARK: - 自动打开最新图片
 
     /// - Parameter onlyIfNew: 从后台回来时只在出现了新的待打码图片时才打开，避免用户退回相册后又被拉进去
-    private func openLatest(onlyIfNew: Bool) {
-        guard canAutoNavigate, let asset = library.latestUnprocessed() else { return }
-        let id = asset.localIdentifier
+    private func openLatest(onlyIfNew: Bool) async {
+        // 查找在后台进行，期间用户可能已经点进了别的图：找到后再确认一次
+        guard canAutoNavigate, let id = await library.latestUnprocessed(), canAutoNavigate else { return }
         if onlyIfNew && id == lastAutoOpened { return }
         lastAutoOpened = id
         selecting = false
@@ -104,7 +104,7 @@ struct LibraryView: View {
     private func requestAccess() {
         Task {
             await library.requestAccess()
-            openLatest(onlyIfNew: false)
+            await openLatest(onlyIfNew: false)
         }
     }
 
