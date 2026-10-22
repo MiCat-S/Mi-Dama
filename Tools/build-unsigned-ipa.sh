@@ -27,10 +27,11 @@ APP="$BUILD/DerivedData/Build/Products/Release-iphoneos/Redact.app"
 VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$APP/Info.plist")
 IPA="$DIST/Mi-Dama-$VERSION-unsigned.ipa"
 
-# IPA 就是把 .app 放进 Payload/ 再 zip；ditto 保留权限和符号链接
+# IPA 就是把 .app 放进 Payload/ 再 zip；ditto 保留权限和符号链接。
+# 不打包资源分支和扩展属性：macOS 会给新文件加 com.apple.provenance 等属性，带上的话包里会多出 __MACOSX/ 目录
 mkdir -p "$BUILD/Payload"
 cp -R "$APP" "$BUILD/Payload/"
 rm -f "$IPA"
-(cd "$BUILD" && ditto -c -k --sequesterRsrc --keepParent Payload "$IPA")
+(cd "$BUILD" && ditto -c -k --norsrc --noextattr --noqtn --noacl --keepParent Payload "$IPA")
 
 echo "已生成：$IPA（$(du -h "$IPA" | cut -f1)）"
