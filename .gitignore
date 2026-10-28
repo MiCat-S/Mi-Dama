@@ -11,3 +11,10 @@ testdata/out/
 # 编译产物（unsigned IPA 发布到 GitHub Releases，不入库）
 build/
 dist/
+
+# Android（android/）
+android/.gradle/
+android/.kotlin/
+android/build/
+android/*/build/
+android/local.properties

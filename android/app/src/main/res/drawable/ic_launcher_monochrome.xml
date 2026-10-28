@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 由 Tools/icon/render-icon.swift 的几何换算而来：1024 画布整体缩放 0.74 后居中，落在自适应图标的安全区内 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="1024"
+    android:viewportHeight="1024">
+    <group android:scaleX="0.74" android:scaleY="0.74" android:translateX="139.8" android:translateY="129.4">
+        <path android:fillColor="#FFFFFF" android:fillAlpha="0.3" android:pathData="M300,200 H724 A132,132 0 0 1 856,332 V596 A132,132 0 0 1 724,728 H300 A132,132 0 0 1 168,596 V332 A132,132 0 0 1 300,200 Z" />
+        <path android:fillColor="#FFFFFF" android:fillAlpha="0.3" android:pathData="M206,576 C222,716 196,788 150,834 C250,828 336,786 400,716 L400,576 Z" />
+        <path android:fillColor="#FFFFFF" android:fillAlpha="0.9" android:pathData="M296,296 H584 A32,32 0 0 1 616,328 A32,32 0 0 1 584,360 H296 A32,32 0 0 1 264,328 A32,32 0 0 1 296,296 Z" />
+        <group>
+            <clip-path android:pathData="M292,392 H732 A28,28 0 0 1 760,420 V612 A28,28 0 0 1 732,640 H292 A28,28 0 0 1 264,612 V420 A28,28 0 0 1 292,392 Z" />
+            <path android:fillColor="#FFFFFF" android:fillAlpha="1.00" android:pathData="M264,392 h124 v124 h-124 Z" />
+            <path android:fillColor="#FFFFFF" android:fillAlpha="0.71" android:pathData="M388,392 h124 v124 h-124 Z" />
+            <path android:fillColor="#FFFFFF" android:fillAlpha="0.88" android:pathData="M512,392 h124 v124 h-124 Z" />
+            <path android:fillColor="#FFFFFF" android:fillAlpha="0.61" android:pathData="M636,392 h124 v124 h-124 Z" />
+            <path android:fillColor="#FFFFFF" android:fillAlpha="0.75" android:pathData="M264,516 h124 v124 h-124 Z" />
+            <path android:fillColor="#FFFFFF" android:fillAlpha="0.97" android:pathData="M388,516 h124 v124 h-124 Z" />
+            <path android:fillColor="#FFFFFF" android:fillAlpha="0.64" android:pathData="M512,516 h124 v124 h-124 Z" />
+            <path android:fillColor="#FFFFFF" android:fillAlpha="0.86" android:pathData="M636,516 h124 v124 h-124 Z" />
+        </group>
+    </group>
+</vector>
