@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 分享时把打码后的图片临时写到缓存目录，再通过 FileProvider 交给目标 App -->
+<paths>
+    <cache-path name="shared" path="shared/" />
+</paths>
