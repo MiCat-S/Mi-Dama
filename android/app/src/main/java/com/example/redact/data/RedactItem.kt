@@ -17,6 +17,9 @@ import com.example.redact.core.Finding
 import com.example.redact.core.FindingKind
 import com.example.redact.core.MaskStyle
 import com.example.redact.core.detect.TextLine
+import com.example.redact.core.render.Composition
+import com.example.redact.core.render.ImageSize
+import com.example.redact.core.render.MergeLayout
 import com.example.redact.core.render.ExportFormat
 import com.example.redact.core.render.ExportSize
 import com.example.redact.core.render.Redactor
@@ -37,6 +40,7 @@ class RedactItem(
     val mediaId: Long? = null,
     /** 原文件名（用来给导出文件起名） */
     val originalFilename: String? = null,
+    val parts: List<RedactItem> = emptyList(),
 ) {
     sealed interface Phase {
         /** 还没开始识别（进入编辑页时才开始） */
@@ -50,7 +54,19 @@ class RedactItem(
     val id: String = UUID.randomUUID().toString()
 
     /** 截图（"自动"格式下导出无损 PNG）还是相机照片（导出 JPEG） */
-    val isScreenshot by lazy { PhotoMetadata.isLikelyScreenshot(bytes) }
+    val isScreenshot: Boolean by lazy { if (isMerged) parts.all { it.isScreenshot } else PhotoMetadata.isLikelyScreenshot(bytes) }
+    val isMerged get() = parts.isNotEmpty()
+    val originals: List<RedactItem> get() = if (isMerged) parts.flatMap { it.originals } else listOf(this)
+    val hasOriginals get() = originals.any { it.mediaUri != null }
+    var requestedLayout by mutableStateOf<MergeLayout?>(null)
+        private set
+    var changingLayout by mutableStateOf(false)
+        private set
+    var layoutPreview by mutableStateOf<TiledImage?>(null)
+        private set
+    fun requestLayout(layout: MergeLayout) { requestedLayout = layout }
+    var composition by mutableStateOf<Composition?>(null)
+        private set
 
     /** 原图自带的元数据，仅用于"查看 EXIF"，导出时一律丢弃 */
     val metadata by lazy { PhotoMetadata.read(bytes) }
@@ -90,7 +106,7 @@ class RedactItem(
     // 编辑（全部可撤销）
 
     /** 撤销 / 重做覆盖的内容：所有区域的勾选、样式、位置，以及全局效果 */
-    private data class EditState(val findings: List<Finding>, val style: MaskStyle?)
+    private data class EditState(val findings: List<Finding>, val style: MaskStyle?, val layout: MergeLayout?)
 
     private val history = EditHistory<EditState>()
 
@@ -99,7 +115,7 @@ class RedactItem(
     val canUndo get() = historyTick >= 0 && history.canUndo
     val canRedo get() = historyTick >= 0 && history.canRedo
 
-    private val editState get() = EditState(findings, styleOverride)
+    private val editState get() = EditState(findings, styleOverride, composition?.layout)
 
     /** 一次可撤销的编辑 */
     fun edit(change: (List<Finding>) -> List<Finding>) {
@@ -109,19 +125,64 @@ class RedactItem(
         historyTick++
     }
 
-    fun undo() {
-        history.undo(editState)?.let(::apply)
+    suspend fun undo() {
+        history.undo(editState)?.let { apply(it) }
         historyTick++
     }
 
-    fun redo() {
-        history.redo(editState)?.let(::apply)
+    suspend fun redo() {
+        history.redo(editState)?.let { apply(it) }
         historyTick++
     }
 
-    private fun apply(state: EditState) {
-        findings = state.findings
-        styleOverride = state.style
+    private suspend fun apply(state: EditState) {
+        if (state.layout != composition?.layout) {
+            commitLayout(Composition(composition!!.partSizes, state.layout!!), state.findings, state.style)
+            requestedLayout = state.layout
+        } else {
+            findings = state.findings
+            styleOverride = state.style
+        }
+    }
+
+    private suspend fun commitLayout(next: Composition, nextFindings: List<Finding>, nextStyle: MaskStyle?) {
+        changingLayout = true
+        try {
+            val color = fillColor
+            val watermark = Settings.export.activeWatermark
+            val src = source(next)
+            val (base, preview) = withContext(Dispatchers.Default) {
+                val base = Images.tiles(Images.fitPixels(Images.toBitmap(src), Images.MAX_DISPLAY_PIXELS))
+                var bitmap = Images.fitPixels(Images.toBitmap(Redactor(color).render(src, nextFindings, nextStyle)), Images.MAX_DISPLAY_PIXELS)
+                if (watermark != null) bitmap = Images.drawWatermark(bitmap, watermark)
+                base to Images.tiles(bitmap)
+            }
+            installComposition(next)
+            findings = nextFindings
+            styleOverride = nextStyle
+            display = base
+            layoutPreview = preview
+            if (displayUsers > 0) cachedSource = src
+        } finally { changingLayout = false }
+    }
+
+    private fun installComposition(next: Composition) {
+        composition = next
+        size = IntSize(next.canvasSize.width, next.canvasSize.height)
+        textLines = next.textLines(parts.map { it.textLines })
+        cachedSource = null
+        display = null
+    }
+
+    suspend fun setLayout(layout: MergeLayout) {
+        val old = composition ?: return
+        if (old.layout == layout) return
+        val before = editState
+        val next = Composition(old.partSizes, layout)
+        commitLayout(next, old.remap(findings, next), styleOverride)
+        Settings.rememberMerge(layout)
+        history.record(before, editState)
+        historyTick++
     }
 
     fun updateFinding(id: String, change: (Finding) -> Finding) = edit { list -> list.map { if (it.id == id) change(it) else it } }
@@ -184,18 +245,34 @@ class RedactItem(
 
     suspend fun loadThumbnail() {
         if (thumbnail != null) return
-        thumbnail = withContext(Dispatchers.Default) { Images.decode(bytes, maxSide = 256)?.asImageBitmap() }
+        thumbnail = withContext(Dispatchers.Default) {
+            if (isMerged) {
+                val bitmap = Images.toBitmap(source())
+                val scale = minOf(1f, 256f / maxOf(bitmap.width, bitmap.height))
+                Images.scale(bitmap, maxOf(1, (bitmap.width * scale).toInt()), maxOf(1, (bitmap.height * scale).toInt())).asImageBitmap()
+            } else Images.decode(bytes, maxSide = 256)?.asImageBitmap()
+        }
     }
 
     /** 进入编辑页时调用，与 releaseDisplay 成对 */
     suspend fun loadDisplay() {
         displayUsers++
+        refreshDisplay()
+    }
+
+    suspend fun refreshDisplay() {
+        if (isMerged) {
+            detectIfNeeded()
+            if (composition == null) return
+        }
+        val layout = composition
         if (display != null) return
         val image = withContext(Dispatchers.Default) {
-            Images.decode(bytes, maxPixels = Images.MAX_DISPLAY_PIXELS)?.let(Images::tiles)
+            if (isMerged) Images.tiles(Images.fitPixels(Images.toBitmap(source(layout)), Images.MAX_DISPLAY_PIXELS))
+            else Images.decode(bytes, maxPixels = Images.MAX_DISPLAY_PIXELS)?.let(Images::tiles)
         }
         // 解码期间编辑页已经关掉：不留住这张大图
-        if (displayUsers > 0) display = image
+        if (displayUsers > 0 && layout == composition) display = image
     }
 
     /** 离开编辑页时调用：大图只在看的时候占内存（还在跑的识别、渲染拿着旧的那份，用完自然释放） */
@@ -203,16 +280,28 @@ class RedactItem(
         displayUsers--
         if (displayUsers > 0) return
         display = null
+        layoutPreview = null
         cachedSource = null
     }
 
     /** 识别、预览、导出用的原图像素。编辑页显示期间缓存一份，避免每次改动都重新解码 */
-    private suspend fun source(): RgbaImage = sourceLock.withLock {
-        cachedSource?.let { return it }
-        val bitmap = withContext(Dispatchers.Default) { Images.decode(bytes) } ?: error("无法读取这张图片")
-        val img = withContext(Dispatchers.Default) { Images.toRgba(bitmap) }
-        withContext(Dispatchers.Main) { size = IntSize(img.width, img.height) }
-        if (displayUsers > 0) cachedSource = img
+    private suspend fun source(layout: Composition? = composition): RgbaImage = sourceLock.withLock {
+        if (layout == composition) cachedSource?.let { return it }
+        val img = withContext(Dispatchers.Default) {
+            if (layout != null) layout.compose { i ->
+                val bitmap = Images.decode(parts[i].bytes, maxPixels = (layout.frames[i].width * layout.frames[i].height).toInt()) ?: error("无法读取第 ${i + 1} 张图片")
+                Images.toRgba(bitmap).also { bitmap.recycle() }
+            } else {
+                val bitmap = Images.decode(bytes) ?: error("无法读取这张图片")
+                Images.toRgba(bitmap).also { bitmap.recycle() }
+            }
+        }
+        withContext(Dispatchers.Main) {
+            if (layout == composition) {
+                size = IntSize(img.width, img.height)
+                if (displayUsers > 0) cachedSource = img
+            }
+        }
         img
     }
 
@@ -221,10 +310,31 @@ class RedactItem(
     private val detectLock = Mutex()
 
     /** 还没识别过就开始识别；正在识别则等它完成（多处同时调用只会识别一次） */
-    suspend fun detectIfNeeded() = detectLock.withLock {
+    suspend fun detectIfNeeded(): Unit = detectLock.withLock {
         if (phase != Phase.Pending) return@withLock
         phase = Phase.Detecting
         try {
+            if (isMerged) {
+                for (part in parts) part.detectIfNeeded()
+                val sizes = parts.map { part ->
+                    val s = part.size ?: error("无法读取合成所需的原图")
+                    ImageSize(s.width, s.height)
+                }
+                val c = Composition(sizes, Settings.mergeLayout(sizes))
+                installComposition(c)
+                findings = c.findings(parts.map { part -> part.findings.map { f ->
+                    f.copy(style = f.style ?: part.styleOverride)
+                } })
+                // Individual defaults are already resolved above; preserve them on import.
+                styleOverride = null
+                val failures = parts.mapIndexedNotNull { i, part ->
+                    (part.phase as? Phase.Failed)?.let { "第 ${i + 1} 张：${it.reason}" }
+                }
+                phase = if (failures.isEmpty()) Phase.Ready else Phase.Failed(failures.joinToString("；"))
+                history.reset()
+                historyTick++
+                return@withLock
+            }
             val result = withContext(Dispatchers.Default) {
                 val bitmap = Images.decode(bytes) ?: error("无法读取这张图片")
                 withContext(Dispatchers.Main) { size = IntSize(bitmap.width, bitmap.height) }
@@ -258,7 +368,7 @@ class RedactItem(
         val findings = findings
         val style = styleOverride
         val color = fillColor
-        val src = source()
+        val src = source(composition)
         withContext(Dispatchers.Default) {
             var bitmap = Images.toBitmap(Redactor(color).render(src, findings, style))
             bitmap = Images.fitPixels(bitmap, Images.MAX_DISPLAY_PIXELS)
@@ -271,7 +381,7 @@ class RedactItem(
     fun export(settings: ExportSettings, size: ExportSize = settings.size.exportSize) = ExportJob(
         item = this, findings = findings, style = styleOverride, color = fillColor,
         watermark = settings.activeWatermark, size = size,
-        format = settings.exportFormat(isScreenshot), filename = outputBaseName,
+        format = settings.exportFormat(isScreenshot), filename = outputBaseName, composition = composition,
     )
 
     private val outputBaseName: String
@@ -290,11 +400,12 @@ class RedactItem(
         val size: ExportSize,
         val format: ExportFormat,
         val filename: String,
+        val composition: Composition?,
     ) {
         val outputFilename get() = "$filename$FILENAME_MARKER${format.extension}"
 
         suspend fun render() = run {
-            val src = item.source()
+            val src = item.source(composition)
             withContext(Dispatchers.Default) {
                 var bitmap = Images.toBitmap(Redactor(color).render(src, findings, style))
                 val (w, h) = size.apply(bitmap.width, bitmap.height)
@@ -313,6 +424,12 @@ class RedactItem(
     companion object {
         /** 本 App 输出的文件名里都带这个标记：相册里据此认出输出图，打开 App 时不会再自动进入它 */
         const val FILENAME_MARKER = "-redacted."
+
+        fun merged(parts: List<RedactItem>): RedactItem {
+            require(parts.size == 2)
+            return RedactItem("merge:${UUID.randomUUID()}", ByteArray(0),
+                originalFilename = "merged-${parts.first().outputBaseName}.png", parts = parts)
+        }
 
         /** 读取图片数据（相册图片可能要从云端取回，由系统完成）；不是图片时返回 null */
         suspend fun load(context: Context, key: String, uri: Uri, mediaId: Long? = null): RedactItem? =

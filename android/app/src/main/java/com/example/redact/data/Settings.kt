@@ -6,6 +6,8 @@ import android.content.SharedPreferences
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.example.redact.core.render.ImageSize
+import com.example.redact.core.render.MergeLayout
 import com.example.redact.core.MaskStyle
 import com.example.redact.core.render.ExportFormat
 import com.example.redact.core.render.ExportSize
@@ -56,6 +58,18 @@ object Settings {
         val list = prefs.getString("processedAssets", "").orEmpty().split(',').mapNotNull { it.toLongOrNull() }
             .filter { it !in ids } + ids
         prefs.edit().putString("processedAssets", list.takeLast(500).joinToString(",")).apply()
+    }
+
+    fun mergeLayout(sizes: List<ImageSize>) = MergeLayout(
+        axis = prefs.getString("merge.axis", null)?.let { MergeLayout.Axis.valueOf(it) } ?: MergeLayout.defaultAxis(sizes),
+        gap = prefs.getString("merge.gap", null)?.let { MergeLayout.Gap.valueOf(it) } ?: MergeLayout.Gap.THIN,
+        background = prefs.getString("merge.background", null)?.let { MergeLayout.Background.valueOf(it) } ?: MergeLayout.Background.WHITE,
+        order = sizes.indices.toList(),
+    )
+
+    fun rememberMerge(layout: MergeLayout) {
+        prefs.edit().putString("merge.axis", layout.axis.name).putString("merge.gap", layout.gap.name)
+            .putString("merge.background", layout.background.name).apply()
     }
 
     lateinit var export: ExportSettings

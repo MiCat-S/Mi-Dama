@@ -9,6 +9,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -51,6 +53,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -72,6 +75,8 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.contentDescription
@@ -80,6 +85,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.redact.core.render.MergeLayout
 import com.example.redact.core.MaskStyle
 import com.example.redact.core.render.EffectPreview
 import com.example.redact.data.Images
@@ -105,18 +111,35 @@ fun ReviewScreen(
     val settings = Settings.export
     val trash = rememberTrashLauncher()
 
-    var rendered by remember(item.id) { mutableStateOf<TiledImage?>(null) }
+    var rendered by remember(item.id, item.composition) { mutableStateOf(item.layoutPreview) }
     var tool by remember(item.id) { mutableStateOf<EditTool?>(null) }
     var toast by remember { mutableStateOf<String?>(null) }
     var report by remember { mutableStateOf<SaveReport?>(null) }
     var saving by remember { mutableStateOf(false) }
     var showExport by remember { mutableStateOf(false) }
     var showHelp by remember { mutableStateOf(false) }
+    var showLayout by remember { mutableStateOf(false) }
+    var layoutSheetHeight by remember { mutableStateOf(0.dp) }
+    val density = LocalDensity.current
     var showColors by remember { mutableStateOf(false) }
 
     val onEdit = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
 
     LaunchedEffect(item.id) { item.loadDisplay() }
+    LaunchedEffect(item.composition) {
+        if (item.composition != null) {
+            rendered = item.layoutPreview
+            if (item.display == null) item.refreshDisplay()
+        }
+    }
+    LaunchedEffect(item.requestedLayout) {
+        item.requestedLayout?.let { layout ->
+            try { item.setLayout(layout) } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                toast = "布局更新失败：${e.message}"
+            }
+        }
+    }
     DisposableEffect(item.id) { onDispose { item.releaseDisplay() } }
     LaunchedEffect(item.id) {
         item.detectIfNeeded()
@@ -129,7 +152,7 @@ fun ReviewScreen(
     }
     // 所见即所得：勾选、效果、颜色、水印变化后重新渲染；渲染期间保留上一张，不闪烁
     val watermark = settings.activeWatermark
-    LaunchedEffect(item.id, item.isDetecting, item.display != null, item.findings, item.styleOverride, item.fillColor, watermark) {
+    LaunchedEffect(item.id, item.isDetecting, item.display != null, item.findings, item.styleOverride, item.fillColor, item.composition, watermark) {
         if (item.isDetecting || item.display == null) return@LaunchedEffect
         runCatching { item.renderPreview(watermark) }.getOrNull()?.let { rendered = it }
     }
@@ -159,7 +182,7 @@ fun ReviewScreen(
     /** ✓：按当前导出设置直接保存，不再弹选项 */
     fun quickSave() = scope.launch {
         saving = true
-        val deleting = settings.deleteOriginal && item.mediaUri != null
+        val deleting = settings.deleteOriginal && item.hasOriginals
         val result = PhotoSaver.saveAll(context, listOf(item), deleting, trash::request)
         saving = false
         handleSaved(result)
@@ -170,11 +193,11 @@ fun ReviewScreen(
         Column(Modifier.fillMaxSize()) {
             ReviewTopBar(
                 item = item, saving = saving, onBack = onBack,
-                onHelp = { showHelp = true }, onShare = { showExport = true }, onDone = { quickSave() },
+                onLayout = { showLayout = true }, onHelp = { showHelp = true }, onShare = { showExport = true }, onDone = { quickSave() },
             )
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 ReviewCanvas(
-                    item = item, rendered = rendered, tool = tool, editable = !item.isDetecting && !saving,
+                    item = item, rendered = rendered, tool = tool, editable = !item.isDetecting && !saving && !item.changingLayout,
                     onEdit = onEdit,
                     onPickColor = { x, y ->
                         sampleColor(item, x, y)?.let {
@@ -184,10 +207,12 @@ fun ReviewScreen(
                         }
                         tool = null
                     },
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().padding(bottom = if (showLayout) layoutSheetHeight else 0.dp),
                 )
                 if (item.display == null) {
-                    ProgressLabel("正在读取图片…", Modifier.align(Alignment.Center))
+                    val failure = item.phase as? RedactItem.Phase.Failed
+                    if (failure != null) Hint("无法读取图片：${failure.reason}", Modifier.align(Alignment.Center))
+                    else ProgressLabel("正在读取图片…", Modifier.align(Alignment.Center))
                 } else if (item.isDetecting) {
                     ProgressLabel("识别中…", Modifier.align(Alignment.Center))
                 }
@@ -196,13 +221,14 @@ fun ReviewScreen(
                 }
                 toast?.let { Hint(it, Modifier.align(Alignment.TopCenter).padding(top = 8.dp), icon = true) }
             }
-            ReviewBottomBar(
+            if (!showLayout) ReviewBottomBar(
                 item = item, tool = tool, onTool = { tool = it }, onEdit = onEdit,
                 onColor = { showColors = true },
             )
         }
     }
 
+    if (showLayout) MergeLayoutSheet(item, onHeight = { layoutSheetHeight = with(density) { it.toDp() } }) { showLayout = false }
     if (showExport) {
         ExportSheet(items = listOf(item), trash = trash, onDismiss = { showExport = false }, onSaved = { handleSaved(it) })
     }
@@ -237,20 +263,22 @@ private fun sampleColor(item: RedactItem, x: Float, y: Float): Int? {
 @Composable
 private fun ReviewTopBar(
     item: RedactItem, saving: Boolean, onBack: (() -> Unit)?,
-    onHelp: () -> Unit, onShare: () -> Unit, onDone: () -> Unit,
+    onLayout: () -> Unit, onHelp: () -> Unit, onShare: () -> Unit, onDone: () -> Unit,
 ) {
+    val scope = rememberCoroutineScope()
     Row(
         Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (onBack != null) IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
-        IconButton(onClick = { item.undo() }, enabled = item.canUndo) { Icon(Icons.AutoMirrored.Filled.Undo, "撤销") }
-        IconButton(onClick = { item.redo() }, enabled = item.canRedo) { Icon(Icons.AutoMirrored.Filled.Redo, "重做") }
+        IconButton(onClick = { scope.launch { item.undo() } }, enabled = item.canUndo && !item.changingLayout && !saving) { Icon(Icons.AutoMirrored.Filled.Undo, "撤销") }
+        IconButton(onClick = { scope.launch { item.redo() } }, enabled = item.canRedo && !item.changingLayout && !saving) { Icon(Icons.AutoMirrored.Filled.Redo, "重做") }
         Spacer(Modifier.weight(1f))
+        if (item.isMerged) TextButton(onClick = onLayout, enabled = !item.isDetecting && !saving && item.composition != null) { Text("布局") }
         IconButton(onClick = onHelp) { Icon(Icons.AutoMirrored.Outlined.HelpOutline, "帮助") }
-        IconButton(onClick = onShare, enabled = !item.isDetecting) { Icon(Icons.Outlined.Share, "导出选项") }
+        IconButton(onClick = onShare, enabled = !item.isDetecting && !item.changingLayout && !saving) { Icon(Icons.Outlined.Share, "导出选项") }
         FilledIconButton(
-            onClick = onDone, enabled = !item.isDetecting && !saving,
+            onClick = onDone, enabled = !item.isDetecting && !saving && !item.changingLayout,
             colors = IconButtonDefaults.filledIconButtonColors(containerColor = SaveGreen, contentColor = Color.White),
             modifier = Modifier.padding(horizontal = 8.dp),
         ) {
@@ -264,7 +292,7 @@ private fun ReviewTopBar(
 private fun ReviewBottomBar(
     item: RedactItem, tool: EditTool?, onTool: (EditTool?) -> Unit, onEdit: () -> Unit, onColor: () -> Unit,
 ) {
-    val editable = !item.isDetecting
+    val editable = !item.isDetecting && !item.changingLayout
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -489,4 +517,42 @@ fun rememberTrashLauncher(): TrashLauncher {
     }
     state.launch = { launcher.launch(it) }
     return state
+}
+
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MergeLayoutSheet(item: RedactItem, onHeight: (Int) -> Unit, onDismiss: () -> Unit) {
+    val layout = item.requestedLayout ?: item.composition?.layout ?: return
+    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss, scrimColor = Color.Transparent, modifier = Modifier.onSizeChanged { onHeight(it.height) }) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("拼图布局", style = MaterialTheme.typography.titleLarge)
+            LayoutChoices("方向", MergeLayout.Axis.entries.map { it.label }, layout.axis.ordinal) {
+                item.requestLayout(layout.copy(axis = MergeLayout.Axis.entries[it]))
+            }
+            LayoutChoices("间距", MergeLayout.Gap.entries.map { it.label }, layout.gap.ordinal) {
+                item.requestLayout(layout.copy(gap = MergeLayout.Gap.entries[it]))
+            }
+            LayoutChoices("间距颜色", MergeLayout.Background.entries.map { it.label }, layout.background.ordinal) {
+                item.requestLayout(layout.copy(background = MergeLayout.Background.entries[it]))
+            }
+            TextButton(onClick = { item.requestLayout(layout.copy(order = layout.order.reversed())) }, modifier = Modifier.fillMaxWidth()) {
+                Text("交换顺序")
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LayoutChoices(label: String, options: List<String>, selected: Int, onSelect: (Int) -> Unit) {
+    Text(label, style = MaterialTheme.typography.labelLarge)
+    androidx.compose.material3.SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+        options.forEachIndexed { i, text ->
+            SegmentedButton(
+                selected = i == selected, onClick = { onSelect(i) },
+                shape = androidx.compose.material3.SegmentedButtonDefaults.itemShape(i, options.size),
+            ) { Text(text) }
+        }
+    }
 }
