@@ -11,6 +11,7 @@ struct HelpSheet: View {
         ("wand.and.sparkles", "左下角魔术棒", "点一下开 / 关全部自动打码；长按按类别开关"),
         ("textformat", "文字工具", "点一下任意一行文字，整行盖住；再点一下取消"),
         ("highlighter", "马克笔", "拖出一个框，盖住任意区域"),
+        ("rectangle.split.2x1", "布局（拼图）", "上下 / 左右、间距、交换顺序；打好的码跟着图走"),
         ("arrow.up.left.and.arrow.down.right", "双指缩放 / 双击", "放大看小字，双击在原大小和放大之间切换"),
         ("arrow.uturn.backward", "撤销 / 重做", "所有改动都可以撤销"),
         ("checkmark.circle.fill", "绿色对勾", "按当前导出设置直接存到相册"),

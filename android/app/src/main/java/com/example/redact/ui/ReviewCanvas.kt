@@ -84,7 +84,7 @@ fun ReviewCanvas(
 ) {
     val display = item.display
     val coords = item.size ?: display?.let { IntSize(it.width, it.height) }
-    if (display == null || coords == null) {
+    if (display == null || coords == null || (item.isMerged && rendered == null)) {
         Box(modifier)
         return
     }

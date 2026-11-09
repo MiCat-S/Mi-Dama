@@ -1,5 +1,5 @@
 // 编辑页底部工具栏（仿 DAMA）：
-//  [自动打码开关]   [当前效果 ⌃ | 文字 | 马克笔]   [颜色]
+//  [自动打码开关]   [当前效果 ⌃ | 文字 | 马克笔 | 布局（仅拼图）]   [颜色]
 //  · 自动打码：点一下全部开 / 关；长按按类别开关
 //  · 效果：点开向上弹出的菜单，每项带真实效果小样
 //  · 颜色：色块、杂讯色块用的颜色
@@ -11,6 +11,8 @@ struct ReviewBottomBar: View {
     let item: RedactItem
     @Binding var tool: EditTool?
     @Binding var colorHex: String
+    /// 拼图才有：打开布局面板
+    var onLayout: (() -> Void)?
     let onEdit: () -> Void
 
     var body: some View {
@@ -21,6 +23,17 @@ struct ReviewBottomBar: View {
                 EffectMenu(item: item, colorHex: colorHex, onEdit: onEdit)
                 ToolButton(tool: .text, systemImage: "textformat", label: "文字", selection: $tool)
                 ToolButton(tool: .marker, systemImage: "highlighter", label: "马克笔", selection: $tool)
+                if let onLayout {
+                    Button(action: onLayout) {
+                        Image(systemName: "rectangle.split.2x1")
+                            .font(.title3)
+                            .frame(width: 44, height: 44)
+                            .foregroundStyle(Color.primary)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(item.isDetecting)
+                    .accessibilityLabel("布局")
+                }
             }
             .padding(.horizontal, 8)
             .frame(height: 56)

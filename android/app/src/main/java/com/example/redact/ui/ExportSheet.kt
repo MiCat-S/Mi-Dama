@@ -95,7 +95,7 @@ fun ExportSheet(
     var sharing by remember { mutableStateOf(false) }
     var showExif by remember { mutableStateOf(false) }
     val first = items.firstOrNull()
-    val canDeleteOriginals = items.any { it.mediaUri != null }
+    val canDeleteOriginals = items.any { it.hasOriginals }
 
     fun changed() = settings.persist()
 

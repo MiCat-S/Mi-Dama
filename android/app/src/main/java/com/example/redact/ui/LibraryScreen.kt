@@ -176,6 +176,8 @@ private fun LibraryScreen(model: MainModel) {
     val scope = rememberCoroutineScope()
     var selecting by remember { mutableStateOf(false) }
     val selection = remember { mutableStateListOf<String>() }
+    var merging by remember { mutableStateOf(false) }
+    var mergeError by remember { mutableStateOf<String?>(null) }
     var openLatest by remember { mutableStateOf(Settings.openLatestOnLaunch) }
 
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
@@ -202,6 +204,11 @@ private fun LibraryScreen(model: MainModel) {
     )
     LaunchedEffect(library.filter, library.access) { library.reload() }
 
+    mergeError?.let { message ->
+        androidx.compose.material3.AlertDialog(onDismissRequest = { mergeError = null },
+            title = { Text("无法合成") }, text = { Text(message) },
+            confirmButton = { TextButton(onClick = { mergeError = null }) { Text("好") } })
+    }
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
             title = { Text(if (selecting) "已选 ${selection.size} 张" else "截图打码") },
@@ -288,16 +295,38 @@ private fun LibraryScreen(model: MainModel) {
                     }
                 }
                 if (selecting) {
-                    Button(
-                        onClick = {
-                            val keys = selection.toList()
-                            selecting = false
-                            selection.clear()
-                            model.routes += ReviewRoute(keys)
-                        },
-                        enabled = selection.isNotEmpty(),
-                        modifier = Modifier.fillMaxWidth().padding(16.dp).height(48.dp),
-                    ) { Text("打码 ${selection.size} 张") }
+                    Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        if (selection.size == 2) OutlinedButton(
+                            enabled = !merging,
+                            onClick = {
+                                val keys = selection.toList()
+                                merging = true
+                                scope.launch {
+                                    try {
+                                        val parts = keys.map { model.store.item(it) ?: error("无法读取选中的图片，请重新选择") }
+                                        val merged = RedactItem.merged(parts)
+                                        model.store.register(merged)
+                                        selecting = false
+                                        selection.clear()
+                                        model.routes += ReviewRoute(listOf(merged.key))
+                                    } catch (e: Exception) {
+                                        if (e is kotlinx.coroutines.CancellationException) throw e
+                                        mergeError = e.message
+                                    } finally { merging = false }
+                                }
+                            }, modifier = Modifier.weight(1f).height(48.dp),
+                        ) { Text(if (merging) "正在读取…" else "拼成一张") }
+                        Button(
+                            onClick = {
+                                val keys = selection.toList()
+                                selecting = false
+                                selection.clear()
+                                model.routes += ReviewRoute(keys)
+                            },
+                            enabled = selection.isNotEmpty() && !merging,
+                            modifier = Modifier.weight(1f).height(48.dp),
+                        ) { Text("打码 ${selection.size} 张") }
+                    }
                 }
             }
         }
@@ -346,6 +375,7 @@ private fun EmptyState(icon: androidx.compose.ui.graphics.vector.ImageVector, ti
 @Composable
 private fun PhotoGrid(library: PhotoLibrary, selection: List<String>, onTap: (PhotoLibrary.Asset) -> Unit) {
     val px = with(LocalDensity.current) { 140.dp.roundToPx() }
+    val processed = Settings.processed
     LazyVerticalGrid(
         columns = GridCells.Fixed(3),
         horizontalArrangement = Arrangement.spacedBy(2.dp),
@@ -358,10 +388,10 @@ private fun PhotoGrid(library: PhotoLibrary, selection: List<String>, onTap: (Ph
             Box(
                 Modifier.aspectRatio(1f).background(MaterialTheme.colorScheme.surfaceContainerHigh)
                     .then(if (index >= 0) Modifier.border(3.dp, MaterialTheme.colorScheme.primary) else Modifier)
-                    .clickable(onClickLabel = if (asset.isOutput) "已打码" else null) { onTap(asset) },
+                    .clickable(onClickLabel = if (asset.isOutput || asset.id in processed) "已打码" else null) { onTap(asset) },
             ) {
                 image?.let { Image(it, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
-                if (asset.isOutput) {
+                if (asset.isOutput || asset.id in processed) {
                     Text(
                         "已打码", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.align(Alignment.BottomStart).padding(4.dp)

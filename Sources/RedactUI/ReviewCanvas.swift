@@ -30,6 +30,8 @@ struct ReviewCanvas: View {
                 .overlay { overlay }
                 .clipShape(RoundedRectangle(cornerRadius: 10))
                 .shadow(color: .black.opacity(0.18), radius: 14, y: 6)
+                // 拼图换布局期间区域还是旧坐标，这时的点按会在换完后被覆盖
+                .allowsHitTesting(!item.isChangingLayout)
         } else {
             ProgressView("正在读取图片…").frame(maxWidth: .infinity, maxHeight: .infinity)
         }

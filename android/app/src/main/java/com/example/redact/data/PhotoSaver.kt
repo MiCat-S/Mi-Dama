@@ -73,7 +73,8 @@ object PhotoSaver {
                 item.phase = RedactItem.Phase.Saved
                 saved++
                 progress(saved)
-                if (item.mediaUri != null) originals += item else withoutOriginal++
+                originals += item.originals.filter { it.mediaUri != null }
+                withoutOriginal += item.originals.count { it.mediaUri == null }
             }
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
@@ -89,7 +90,7 @@ object PhotoSaver {
         var outcome = SaveReport.Outcome.SUCCESS
         if (deletingOriginals && originals.isNotEmpty()) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                val request = MediaStore.createTrashRequest(context.contentResolver, originals.mapNotNull { it.mediaUri }, true)
+                val request = MediaStore.createTrashRequest(context.contentResolver, originals.mapNotNull { it.mediaUri }.distinct(), true)
                 text = if (trash(request.intentSender)) "$head，原图已移到回收站" else "$head，原图未删除"
             } else {
                 text = "$head。Android 10 不支持移到回收站，原图未删除"

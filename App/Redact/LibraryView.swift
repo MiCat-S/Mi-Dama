@@ -9,6 +9,8 @@ import SwiftUI
 enum Route: Hashable {
     /// 一张时直接审核；多张时进入批量（顶部缩略图条切换）
     case review([String])
+    /// 两张拼成一张后审核（按选图顺序拼）
+    case merge([String])
 }
 
 struct LibraryView: View {
@@ -36,6 +38,8 @@ struct LibraryView: View {
                         ReviewContainer(key: keys[0], store: store)
                     case .review(let keys):
                         BatchReviewView(keys: keys, store: store)
+                    case .merge(let keys):
+                        MergeContainer(keys: keys, store: store)
                     }
                 }
         }
@@ -140,17 +144,23 @@ struct LibraryView: View {
             }
         }
         if selecting {
-            ToolbarItem(placement: .bottomBar) {
-                Button("打码 \(selection.count) 张") {
-                    let keys = selection
-                    selecting = false
-                    selection = []
-                    path.append(.review(keys))
-                }
-                .primaryActionStyle()
-                .disabled(selection.isEmpty)
+            ToolbarItemGroup(placement: .bottomBar) {
+                Button("拼成一张") { openSelection(as: Route.merge) }
+                    .secondaryActionStyle()
+                    .disabled(selection.count != 2)
+                Spacer()
+                Button("打码 \(selection.count) 张") { openSelection(as: Route.review) }
+                    .primaryActionStyle()
+                    .disabled(selection.isEmpty)
             }
         }
+    }
+
+    private func openSelection(as route: ([String]) -> Route) {
+        let keys = selection
+        selecting = false
+        selection = []
+        path.append(route(keys))
     }
 
     private func openSettings() {
