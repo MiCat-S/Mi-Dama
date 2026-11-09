@@ -56,7 +56,8 @@ public enum PhotoSaver {
                 item.phase = .saved
                 saved += 1
                 progress(saved)
-                if let id = item.assetIdentifier { originals.append(id) } else { withoutOriginal += 1 }
+                // 拼图有几张原图（都标记为已打码，"保存后删除原图"时一起删）
+                if item.assetIdentifiers.isEmpty { withoutOriginal += 1 } else { originals += item.assetIdentifiers }
             }
         } catch {
             Preferences.markProcessed(originals)

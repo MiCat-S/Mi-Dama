@@ -10,7 +10,6 @@ public struct ReviewView: View {
     /// 保存完成后的回调（批量模式跳到下一张、分享扩展结束扩展）；为 nil 时成功后返回上一页
     private let onSaved: ((SaveReport) -> Void)?
 
-    @State private var rendered: UIImage?
     @State private var tool: EditTool?
     @State private var sheet: ReviewSheet?
     @State private var toast: EditorToast?
@@ -26,7 +25,7 @@ public struct ReviewView: View {
     @Environment(\.dismiss) private var dismiss
 
     enum ReviewSheet: String, Identifiable {
-        case export, help
+        case export, help, layout
         var id: String { rawValue }
     }
 
@@ -38,8 +37,8 @@ public struct ReviewView: View {
 
     public var body: some View {
         ZoomableView(aspect: item.size.height / max(1, item.size.width), isScrollEnabled: tool != .marker,
-                     bottomInset: max(0, canvasBottom - barTop)) {
-            ReviewCanvas(item: item, rendered: rendered, tool: tool) { editTicks += 1 }
+                     bottomInset: sheet == .layout ? MergeLayoutSheet.height + 24 : max(0, canvasBottom - barTop)) {
+            ReviewCanvas(item: item, rendered: item.preview, tool: tool) { editTicks += 1 }
         }
         .background {
             // 背景铺满全屏（含 Home 指示条区域），用它量出屏幕底边
@@ -56,7 +55,8 @@ public struct ReviewView: View {
         .animation(.easeOut(duration: 0.2), value: item.isDetecting)
         .editorToast($toast)
         .overlay(alignment: .bottom) {
-            ReviewBottomBar(item: item, tool: $tool, colorHex: $colorHex) { editTicks += 1 }
+            ReviewBottomBar(item: item, tool: $tool, colorHex: $colorHex,
+                            onLayout: item.isMerged ? { sheet = .layout } : nil) { editTicks += 1 }
                 .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { barTop = $0 }
         }
         .navigationTitle("")
@@ -69,13 +69,10 @@ public struct ReviewView: View {
             announceDetection()
         }
         .onDisappear { item.releaseDisplayImage() }
-        // 所见即所得：勾选、效果、颜色、水印变化后重新渲染；渲染期间保留上一张，不闪烁
+        // 所见即所得：勾选、效果、颜色、水印、拼图布局变化后重新渲染（结果存进 item.preview）；渲染期间保留上一张，不闪烁
         .task(id: renderKey) {
             guard !item.isDetecting, item.displayImage != nil else { return }
-            let image = await item.renderPreview()
-            // 渲染期间又改了：这张已经过时，交给最新那次，不能用它盖掉新结果
-            guard !Task.isCancelled else { return }
-            rendered = image
+            await item.renderPreview()
         }
         .onChange(of: colorHex) { _, new in
             item.fillColorHex = new
@@ -89,13 +86,15 @@ public struct ReviewView: View {
                 ExportSheet(items: [item]) { handleSaved($0) }
             case .help:
                 HelpSheet()
+            case .layout:
+                MergeLayoutSheet(item: item) { editTicks += 1 }
             }
         }
     }
 
     private var renderKey: String {
         "\(item.isDetecting)-\(item.displayImage != nil)-\(item.styleOverride?.rawValue ?? "auto")-\(item.fillColorHex)-"
-            + "\(String(describing: settings.activeWatermark))-"
+            + "\(String(describing: settings.activeWatermark))-\(String(describing: item.mergeLayout))-"
             + item.findings.map { "\($0.id)\($0.isEnabled)\($0.style?.rawValue ?? "")" }.joined()
     }
 
@@ -117,7 +116,7 @@ public struct ReviewView: View {
     private func quickSave() async {
         saving = true
         defer { saving = false }
-        let deleting = settings.deleteOriginal && item.assetIdentifier != nil
+        let deleting = settings.deleteOriginal && !item.assetIdentifiers.isEmpty
         handleSaved(await PhotoSaver.saveAll([item], deletingOriginals: deleting))
     }
 

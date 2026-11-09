@@ -1,4 +1,4 @@
-// 从相册 / 选择器打开图片：单张直接进审核页；多张在顶部缩略图条里切换，后台依次识别
+// 从相册 / 选择器打开图片：单张直接进审核页；多张在顶部缩略图条里切换，后台依次识别；两张也可以拼成一张再审核
 import RedactUI
 import SwiftUI
 
@@ -26,6 +26,46 @@ struct ReviewContainer: View {
             item = store.cached(key)
             if item == nil { item = await store.item(for: key) }
             failed = item == nil
+        }
+    }
+}
+
+/// 拼图：读取各张图后拼成一张，进入同一个审核页（逐张识别由拼图自己完成）。
+/// 拼好的图按选图顺序缓存，退回相册再选同样两张时，布局和改动都还在
+struct MergeContainer: View {
+    let keys: [String]
+    let store: ItemStore
+    @State private var item: RedactItem?
+    @State private var failed = false
+
+    var body: some View {
+        Group {
+            if let item {
+                ReviewView(item: item)
+            } else if failed {
+                ContentUnavailableView("无法读取图片", systemImage: "exclamationmark.triangle",
+                                       description: Text("其中一张图片可能已被删除，或还在从 iCloud 下载。"))
+            } else {
+                ProgressView("正在读取图片…")
+            }
+        }
+        .task {
+            let key = "merge:" + keys.joined(separator: "|")
+            if let cached = store.cached(key) {
+                item = cached
+                return
+            }
+            var parts: [RedactItem] = []
+            for k in keys {
+                guard let part = await store.item(for: k) else { break }
+                parts.append(part)
+            }
+            guard parts.count == keys.count, let merged = RedactItem(merging: parts) else {
+                failed = true
+                return
+            }
+            store.register(merged, key: key)
+            item = merged
         }
     }
 }

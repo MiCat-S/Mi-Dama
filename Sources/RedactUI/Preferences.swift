@@ -18,6 +18,23 @@ public enum Preferences {
         set { UserDefaults.standard.set(newValue, forKey: colorKey) }
     }
 
+    private static let mergeLayoutKey = "mergeLayout"
+
+    /// 拼图布局：在布局面板里改过就沿用上次的方向、间距、颜色（顺序总是按选图的顺序）；没改过按图片形状选
+    public static func mergeLayout(for sizes: [CGSize]) -> MergeLayout {
+        let order = Array(sizes.indices)
+        if let data = UserDefaults.standard.data(forKey: mergeLayoutKey),
+           var saved = try? JSONDecoder().decode(MergeLayout.self, from: data) {
+            saved.order = order
+            return saved
+        }
+        return MergeLayout(axis: MergeLayout.defaultAxis(for: sizes), order: order)
+    }
+
+    public static func rememberMergeLayout(_ layout: MergeLayout) {
+        UserDefaults.standard.set(try? JSONEncoder().encode(layout), forKey: mergeLayoutKey)
+    }
+
     private static let processedKey = "processedAssets"
 
     /// 已经保存过打码版本的原图（localIdentifier），打开 App 时不再自动进入它们

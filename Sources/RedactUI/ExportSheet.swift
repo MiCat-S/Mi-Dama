@@ -19,7 +19,7 @@ public struct ExportSheet: View {
     }
 
     private var first: RedactItem? { items.first }
-    private var canDeleteOriginals: Bool { items.contains { $0.assetIdentifier != nil } }
+    private var canDeleteOriginals: Bool { items.contains { !$0.assetIdentifiers.isEmpty } }
 
     public var body: some View {
         NavigationStack {
@@ -68,7 +68,8 @@ public struct ExportSheet: View {
                     }
                 }
 
-                if items.count == 1, let first {
+                // 拼图没有单独的一张原图
+                if items.count == 1, let first, !first.isMerged {
                     Section {
                         NavigationLink("查看原图 EXIF") { MetadataView(metadata: first.metadata) }
                     } footer: {
